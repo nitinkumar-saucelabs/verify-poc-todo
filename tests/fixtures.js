@@ -2,27 +2,60 @@ const fs = require('fs');
 const base = require('@playwright/test');
 
 /**
- * The DOM as it stood when the test failed, attached to the run.
+ * Two artefacts triage cannot work without, attached on failure only.
  *
- * Triage needs this to tell a renamed selector from a broken app: an action
- * that timed out waiting for `getByTestId('add-button')` is only a TEST BUG
- * if that id really is gone from the page. Without the snapshot the verdict
- * rules correctly refuse to guess and return NEEDS HUMAN.
+ * 1. THE DOM AT FAILURE (`page-source.html`)
  *
- * Why the suite attaches it rather than the agent fetching it:
+ * Triage needs it to tell a renamed selector from a broken app: an action that
+ * timed out waiting for `getByTestId('add-button')` is only a TEST BUG if that
+ * id really is gone from the page. Without it the rules correctly refuse to
+ * guess and return NEEDS HUMAN.
  *
- *  - Playwright writes no page-source artifact of its own. The trace holds DOM
- *    snapshots, but it is a zip the agent would have to unpack.
- *  - Re-fetching the URL afterwards is WRONG, and measurably so. This app
- *    renders its list client-side, so a freshly served page never contains
- *    `todo-item` even when the app is perfectly healthy — that mistake would
- *    label every APP BUG a TEST BUG. The snapshot has to be the live DOM at
- *    the moment of failure, which only the browser session has.
+ * Playwright writes no page-source artifact of its own, and re-fetching the URL
+ * afterwards is WRONG and measurably so — this app renders its list
+ * client-side, so a freshly served page never contains `todo-item` even when
+ * the app is perfectly healthy. That mistake would label every APP BUG a TEST
+ * BUG. The snapshot has to be the live DOM at the moment of failure, which
+ * only the browser session has.
  *
- * Attached only on failure, so green runs carry no extra payload.
+ * 2. THE NETWORK LOG (`network.har`)
+ *
+ * Triage needs it for the opposite verdict: an assertion that saw the wrong
+ * state is an APP BUG only if the network log shows the backend refusing the
+ * request. Measured 15 Sept 2026 on a real Sauce job: `/v1/eds/{job}/network.har`
+ * returns 404 and no HAR appears in the job's assets at all. Extended
+ * Debugging is a WebDriver feature — Playwright jobs on Sauce capture no HAR.
+ * So the suite records its own, exactly as it does the DOM.
+ *
+ * `content: 'omit'` keeps response bodies out: the rules only read each entry's
+ * URL and status, and the bodies are both large and potentially sensitive.
+ *
+ * A HAR is only written when its context closes, so this has to live on the
+ * `context` fixture rather than on `page` — by the time an afterEach hook runs
+ * the file does not exist yet.
  */
 const test = base.test.extend({
-  page: async ({ page }, use, testInfo) => {
+  context: async ({ browser }, use, testInfo) => {
+    const harPath = testInfo.outputPath('network.har');
+    const context = await browser.newContext({
+      recordHar: { path: harPath, content: 'omit' },
+    });
+
+    await use(context);
+
+    await context.close(); // flushes the HAR to disk
+
+    if (testInfo.status !== testInfo.expectedStatus && fs.existsSync(harPath)) {
+      await testInfo.attach('network.har', {
+        path: harPath,
+        contentType: 'application/json',
+      });
+    }
+  },
+
+  page: async ({ context }, use, testInfo) => {
+    const page = await context.newPage();
+
     await use(page);
 
     if (testInfo.status === testInfo.expectedStatus) return;
