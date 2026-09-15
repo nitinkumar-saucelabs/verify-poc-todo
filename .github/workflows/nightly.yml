@@ -22,6 +22,10 @@ jobs:
       - run: npm ci
 
       - name: Run suite on Sauce
+        # Variants other than `none` fail on purpose; the triage agent is the
+        # consumer of those failures, so a red suite must not fail the job.
+        # The action has no ignore-failure input, so this is how it is done.
+        continue-on-error: true
         uses: saucelabs/saucectl-run-action@v4
         env:
           SAUCE_USERNAME: ${{ secrets.SAUCE_USERNAME }}
@@ -31,6 +35,4 @@ jobs:
           COMMIT_SHA: ${{ github.sha }}
           BUILD_TAG: nightly-${{ github.run_id }}-${{ matrix.variant }}
         with:
-          # Variants other than `none` fail on purpose; the triage agent is the
-          # consumer of those failures, so a red suite must not fail the job.
-          sauce-ignore-failure: true
+          saucectl-version: latest

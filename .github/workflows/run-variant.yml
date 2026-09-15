@@ -28,6 +28,11 @@ jobs:
       - run: npm ci
 
       - name: Run suite on Sauce
+        # The suite is MEANT to fail for every variant but `none` — the triage
+        # agent is the consumer of those failures. The action has no
+        # ignore-failure input (measured 15 Sept: it warns "Unexpected
+        # input(s) 'sauce-ignore-failure'"), so this is the GitHub-native way.
+        continue-on-error: true
         uses: saucelabs/saucectl-run-action@v4
         env:
           SAUCE_USERNAME: ${{ secrets.SAUCE_USERNAME }}
@@ -37,5 +42,5 @@ jobs:
           COMMIT_SHA: ${{ github.sha }}
           BUILD_TAG: manual-${{ github.run_id }}-${{ inputs.variant }}
         with:
-          sauce-ignore-failure: true
-          sauce-args: ${{ inputs.suite && format('--select-suite {0}', inputs.suite) || '' }}
+          # `select-suite` is the real input name; `sauce-args` is not one.
+          select-suite: ${{ inputs.suite }}

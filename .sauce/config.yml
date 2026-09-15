@@ -18,60 +18,103 @@ rootDir: ./
 # One suite per spec per browser. The suite name is what the triage agent
 # passes to `saucectl run --select-suite <name>` when it reruns a failure,
 # so it must stay stable and unique.
+#
+# Every suite carries `env`. saucectl does NOT forward the machine's
+# environment to the remote run, so without this the tests execute on the
+# Sauce VM with BASE_URL unset (falling back to localhost:8080, which is
+# nothing there) and VARIANT defaulting to `none` — a HEALTHY app. The
+# deliberate defect would vanish, the test would pass, and triage would read
+# that pass as "not deterministic, therefore FLAKE".
 suites:
   - name: add-chromium
     platformName: "Windows 11"
     testMatch: ["tests/add.spec.js"]
     params: { browserName: chromium, project: chromium }
+    env:
+      BASE_URL: $BASE_URL
+      VARIANT: $VARIANT
   - name: add-firefox
     platformName: "Windows 11"
     testMatch: ["tests/add.spec.js"]
     params: { browserName: firefox, project: firefox }
+    env:
+      BASE_URL: $BASE_URL
+      VARIANT: $VARIANT
 
   - name: complete-chromium
     platformName: "Windows 11"
     testMatch: ["tests/complete.spec.js"]
     params: { browserName: chromium, project: chromium }
+    env:
+      BASE_URL: $BASE_URL
+      VARIANT: $VARIANT
   - name: complete-firefox
     platformName: "Windows 11"
     testMatch: ["tests/complete.spec.js"]
     params: { browserName: firefox, project: firefox }
+    env:
+      BASE_URL: $BASE_URL
+      VARIANT: $VARIANT
 
   - name: delete-chromium
     platformName: "Windows 11"
     testMatch: ["tests/delete.spec.js"]
     params: { browserName: chromium, project: chromium }
+    env:
+      BASE_URL: $BASE_URL
+      VARIANT: $VARIANT
   - name: delete-firefox
     platformName: "Windows 11"
     testMatch: ["tests/delete.spec.js"]
     params: { browserName: firefox, project: firefox }
+    env:
+      BASE_URL: $BASE_URL
+      VARIANT: $VARIANT
 
   - name: filter-chromium
     platformName: "Windows 11"
     testMatch: ["tests/filter.spec.js"]
     params: { browserName: chromium, project: chromium }
+    env:
+      BASE_URL: $BASE_URL
+      VARIANT: $VARIANT
   - name: filter-firefox
     platformName: "Windows 11"
     testMatch: ["tests/filter.spec.js"]
     params: { browserName: firefox, project: firefox }
+    env:
+      BASE_URL: $BASE_URL
+      VARIANT: $VARIANT
 
   - name: persist-chromium
     platformName: "Windows 11"
     testMatch: ["tests/persist.spec.js"]
     params: { browserName: chromium, project: chromium }
+    env:
+      BASE_URL: $BASE_URL
+      VARIANT: $VARIANT
   - name: persist-firefox
     platformName: "Windows 11"
     testMatch: ["tests/persist.spec.js"]
     params: { browserName: firefox, project: firefox }
+    env:
+      BASE_URL: $BASE_URL
+      VARIANT: $VARIANT
 
   - name: empty-chromium
     platformName: "Windows 11"
     testMatch: ["tests/empty.spec.js"]
     params: { browserName: chromium, project: chromium }
+    env:
+      BASE_URL: $BASE_URL
+      VARIANT: $VARIANT
   - name: empty-firefox
     platformName: "Windows 11"
     testMatch: ["tests/empty.spec.js"]
     params: { browserName: firefox, project: firefox }
+    env:
+      BASE_URL: $BASE_URL
+      VARIANT: $VARIANT
 
 artifacts:
   download:
