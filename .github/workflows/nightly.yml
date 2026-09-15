@@ -4,7 +4,12 @@ name: Nightly suite
 # produces — Sauce Verify owns no scheduler.
 on:
   schedule:
-    - cron: '47 21 * * *'
+    # 09:30 UTC = 15:00 IST. Deliberately a working-hour slot, not the middle
+    # of the night: the triage agent has to be reachable when these jobs
+    # finish, or Sauce delivers 48 webhooks into a black hole and the run
+    # produces grid minutes and no verdicts. Move this back to a real
+    # overnight slot once the receiver is deployed somewhere always-on.
+    - cron: '30 9 * * *'
   workflow_dispatch:
 
 jobs:
