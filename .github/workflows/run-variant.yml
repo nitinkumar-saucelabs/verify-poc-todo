@@ -1,0 +1,41 @@
+name: Run one variant
+
+# Manual entry point, and the one the triage agent calls when it reruns a
+# single failing suite.
+on:
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: Which defect to exhibit
+        type: choice
+        required: true
+        default: none
+        options: [none, app, flaky, selector]
+      suite:
+        description: Single saucectl suite to run, e.g. add-chromium. Empty runs all.
+        type: string
+        required: false
+        default: ''
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+
+      - name: Run suite on Sauce
+        uses: saucelabs/saucectl-run-action@v4
+        env:
+          SAUCE_USERNAME: ${{ secrets.SAUCE_USERNAME }}
+          SAUCE_ACCESS_KEY: ${{ secrets.SAUCE_ACCESS_KEY }}
+          BASE_URL: ${{ vars.BASE_URL }}
+          VARIANT: ${{ inputs.variant }}
+          COMMIT_SHA: ${{ github.sha }}
+          BUILD_TAG: manual-${{ github.run_id }}-${{ inputs.variant }}
+        with:
+          sauce-ignore-failure: true
+          sauce-args: ${{ inputs.suite && format('--select-suite {0}', inputs.suite) || '' }}

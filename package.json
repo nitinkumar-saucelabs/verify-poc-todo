@@ -1,0 +1,18 @@
+{
+  "name": "verify-poc-todo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sauce Verify POC target: a todo app with switchable defects, and its Playwright suite.",
+  "scripts": {
+    "serve": "npx --yes http-server app -p 8080 -c-1",
+    "test": "playwright test",
+    "test:none": "VARIANT=none playwright test",
+    "test:app": "VARIANT=app playwright test",
+    "test:flaky": "VARIANT=flaky playwright test",
+    "test:selector": "VARIANT=selector playwright test",
+    "sauce": "saucectl run"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1"
+  }
+}

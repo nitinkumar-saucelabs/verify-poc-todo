@@ -1,0 +1,36 @@
+name: Nightly suite
+
+# The customer's own schedule. The triage loop starts from the job events this
+# produces — Sauce Verify owns no scheduler.
+on:
+  schedule:
+    - cron: '47 21 * * *'
+  workflow_dispatch:
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [none, app, flaky, selector]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+
+      - name: Run suite on Sauce
+        uses: saucelabs/saucectl-run-action@v4
+        env:
+          SAUCE_USERNAME: ${{ secrets.SAUCE_USERNAME }}
+          SAUCE_ACCESS_KEY: ${{ secrets.SAUCE_ACCESS_KEY }}
+          BASE_URL: ${{ vars.BASE_URL }}
+          VARIANT: ${{ matrix.variant }}
+          COMMIT_SHA: ${{ github.sha }}
+          BUILD_TAG: nightly-${{ github.run_id }}-${{ matrix.variant }}
+        with:
+          # Variants other than `none` fail on purpose; the triage agent is the
+          # consumer of those failures, so a red suite must not fail the job.
+          sauce-ignore-failure: true

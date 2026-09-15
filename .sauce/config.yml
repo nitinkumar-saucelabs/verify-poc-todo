@@ -1,0 +1,89 @@
+apiVersion: v1alpha
+kind: playwright
+sauce:
+  region: us-west-1
+  concurrency: 6
+  metadata:
+    # BUILD_TAG and COMMIT_SHA are injected by CI. COMMIT_SHA is the POC's
+    # miniature of HLD decision D9: every job carries what a rerun needs.
+    build: $BUILD_TAG
+    tags:
+      - verify-poc
+      - variant:$VARIANT
+      - commit:$COMMIT_SHA
+playwright:
+  version: package.json
+  configFile: playwright.config.js
+rootDir: ./
+# One suite per spec per browser. The suite name is what the triage agent
+# passes to `saucectl run --select-suite <name>` when it reruns a failure,
+# so it must stay stable and unique.
+suites:
+  - name: add-chromium
+    platformName: "Windows 11"
+    testMatch: ["tests/add.spec.js"]
+    params: { browserName: chromium, project: chromium }
+  - name: add-firefox
+    platformName: "Windows 11"
+    testMatch: ["tests/add.spec.js"]
+    params: { browserName: firefox, project: firefox }
+
+  - name: complete-chromium
+    platformName: "Windows 11"
+    testMatch: ["tests/complete.spec.js"]
+    params: { browserName: chromium, project: chromium }
+  - name: complete-firefox
+    platformName: "Windows 11"
+    testMatch: ["tests/complete.spec.js"]
+    params: { browserName: firefox, project: firefox }
+
+  - name: delete-chromium
+    platformName: "Windows 11"
+    testMatch: ["tests/delete.spec.js"]
+    params: { browserName: chromium, project: chromium }
+  - name: delete-firefox
+    platformName: "Windows 11"
+    testMatch: ["tests/delete.spec.js"]
+    params: { browserName: firefox, project: firefox }
+
+  - name: filter-chromium
+    platformName: "Windows 11"
+    testMatch: ["tests/filter.spec.js"]
+    params: { browserName: chromium, project: chromium }
+  - name: filter-firefox
+    platformName: "Windows 11"
+    testMatch: ["tests/filter.spec.js"]
+    params: { browserName: firefox, project: firefox }
+
+  - name: persist-chromium
+    platformName: "Windows 11"
+    testMatch: ["tests/persist.spec.js"]
+    params: { browserName: chromium, project: chromium }
+  - name: persist-firefox
+    platformName: "Windows 11"
+    testMatch: ["tests/persist.spec.js"]
+    params: { browserName: firefox, project: firefox }
+
+  - name: empty-chromium
+    platformName: "Windows 11"
+    testMatch: ["tests/empty.spec.js"]
+    params: { browserName: chromium, project: chromium }
+  - name: empty-firefox
+    platformName: "Windows 11"
+    testMatch: ["tests/empty.spec.js"]
+    params: { browserName: firefox, project: firefox }
+
+artifacts:
+  download:
+    when: always
+    match:
+      - "*.json"
+      - "*.log"
+      # The DOM the suite attaches on failure (tests/fixtures.js). Pulled back
+      # so a heal can be checked by hand against the same page the agent saw.
+      - "*.html"
+    directory: ./artifacts/
+
+reporters:
+  spotlight:
+    enabled: true

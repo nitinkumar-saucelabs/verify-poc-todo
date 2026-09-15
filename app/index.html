@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Todo — Sauce Verify POC</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app">
+    <h1>Todo</h1>
+    <p class="variant" data-testid="variant-banner"></p>
+
+    <form class="new" data-testid="new-form">
+      <input data-testid="new-input" autocomplete="off" placeholder="What needs doing?" aria-label="New todo">
+      <button type="submit" data-testid="add-button">Add</button>
+    </form>
+
+    <p class="error" data-testid="error" hidden></p>
+
+    <ul class="list" data-testid="todo-list"></ul>
+
+    <p class="empty" data-testid="empty-state" hidden>Nothing here yet.</p>
+
+    <footer class="filters">
+      <button data-testid="filter-all" data-filter="all">All</button>
+      <button data-testid="filter-active" data-filter="active">Active</button>
+      <button data-testid="filter-completed" data-filter="completed">Completed</button>
+      <span data-testid="count"></span>
+    </footer>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
