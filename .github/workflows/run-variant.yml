@@ -10,7 +10,7 @@ on:
         type: choice
         required: true
         default: none
-        options: [none, app, flaky, selector]
+        options: [none, app, flaky, selector, submit]
       suite:
         description: Single saucectl suite to run, e.g. add-chromium. Empty runs all.
         type: string

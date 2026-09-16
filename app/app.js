@@ -8,6 +8,7 @@
  *   ?bug=app       Add posts to an endpoint that rejects   -> APP BUG
  *   ?bug=flaky     Complete silently fails some of the time-> FLAKE
  *   ?bug=selector  Add button's data-testid is renamed     -> TEST BUG
+ *   ?bug=submit    Add button removed; Enter submits       -> TEST BUG (needs a model)
  *
  * Support parameters:
  *   ?seed=N        pre-populate N todos without using the Add path, so specs
@@ -66,6 +67,19 @@ async function addRejectedByBackend(title) {
 /** ?bug=flaky: Complete fails part of the time, on unchanged code. */
 function completeSilentlyFails() {
   return config.bug === 'flaky' && Math.random() < config.flakeRate;
+}
+
+/** ?bug=submit: the Add button is gone; the form is submitted with Enter.
+ *
+ * Deliberately NOT healable by swapping one data-testid for another: there is
+ * no replacement id to find, because the control no longer exists. A human can
+ * still add a todo — type and press Enter — so the app is healthy and the test
+ * is stale, which is the case a selector matcher cannot express and a model can.
+ */
+function applySubmitDefect() {
+  if (config.bug !== 'submit') return;
+  const button = document.querySelector('[data-testid="add-button"]');
+  if (button) button.remove();
 }
 
 /** ?bug=selector: the button the tests click is renamed. */
@@ -189,6 +203,7 @@ function init() {
     todos = load();
   }
   applySelectorDefect();
+  applySubmitDefect();
 
   document.querySelector('[data-testid="new-form"]').addEventListener('submit', async (event) => {
     event.preventDefault();
