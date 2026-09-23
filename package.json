@@ -10,6 +10,7 @@
     "test:app": "VARIANT=app playwright test",
     "test:flaky": "VARIANT=flaky playwright test",
     "test:selector": "VARIANT=selector playwright test",
+    "test:telemetry": "playwright test tests/telemetry.spec.js --project=chromium",
     "sauce": "saucectl run"
   },
   "devDependencies": {

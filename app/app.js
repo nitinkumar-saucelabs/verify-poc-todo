@@ -18,6 +18,8 @@
  *                  relative path, which static hosting answers 405.
  */
 
+import { telemetry } from './telemetry.js';
+
 const STORAGE_KEY = 'verify-poc-todos';
 
 const params = new URLSearchParams(location.search);
@@ -60,7 +62,12 @@ async function addRejectedByBackend(title) {
     body: JSON.stringify({ title }),
   });
   if (!response.ok) {
-    throw new Error(`Could not save todo (${response.status})`);
+    // Carried on the error so the report can name the request, the way the
+    // triage rules name it from the HAR.
+    const error = new Error(`Could not save todo (${response.status})`);
+    error.apiPath = new URL(config.api, location.href).pathname;
+    error.apiStatus = response.status;
+    throw error;
   }
 }
 
@@ -93,10 +100,14 @@ function applySelectorDefect() {
 
 async function addTodo(title) {
   if (!title.trim()) return;
+  // The SDK's own click breadcrumb says `Clicked  BUTTON` — no data-testid,
+  // no typed value. These manual ones carry what a generated test needs.
+  telemetry.crumb('add todo', { testid: 'new-form', title: title.trim() });
   if (config.bug === 'app') {
     await addRejectedByBackend(title); // throws; the item is never added
   }
   todos.push({ id: crypto.randomUUID(), title: title.trim(), done: false });
+  telemetry.crumb('todo added', { count: todos.length });
   save();
   render();
 }
@@ -106,18 +117,22 @@ function toggleTodo(id) {
   const todo = todos.find((t) => t.id === id);
   if (!todo) return;
   todo.done = !todo.done;
+  telemetry.crumb(todo.done ? 'todo completed' : 'todo reopened', { testid: 'toggle', title: todo.title });
   save();
   render();
 }
 
 function deleteTodo(id) {
+  const todo = todos.find((t) => t.id === id);
   todos = todos.filter((t) => t.id !== id);
+  telemetry.crumb('todo deleted', { testid: 'delete', title: todo?.title });
   save();
   render();
 }
 
 function setFilter(next) {
   filter = next;
+  telemetry.crumb(`filter ${next}`, { testid: `filter-${next}` });
   render();
 }
 
@@ -193,6 +208,7 @@ function seedTodos(count) {
 }
 
 function init() {
+  telemetry.start({ variant: config.bug });
   document.querySelector('[data-testid="variant-banner"]').textContent =
     `bug=${config.bug}`;
 
@@ -214,6 +230,12 @@ function init() {
       input.value = '';
     } catch (error) {
       showError(error.message);
+      // What Part 2 consumes: the error, with the request that caused it and
+      // the trail of what the user did first.
+      telemetry.report(error, {
+        'api.path': error.apiPath,
+        'api.status': error.apiStatus,
+      });
     }
   });
 

@@ -29,6 +29,9 @@
       <span data-testid="count"></span>
     </footer>
   </main>
-  <script src="app.js"></script>
+  <!-- A module, so it can import the vendored Backtrace SDK. Deferred by
+       definition, so the DOM is complete when init() runs — same timing as
+       the classic script at the end of <body> it replaces. -->
+  <script type="module" src="app.js"></script>
 </body>
 </html>

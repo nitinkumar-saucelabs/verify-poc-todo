@@ -78,3 +78,21 @@ original job recorded what it needs.
 
 Repository secrets: `SAUCE_USERNAME`, `SAUCE_ACCESS_KEY`.
 Repository variable: `BASE_URL` (the Pages URL once `pages.yml` has run once).
+
+## Error reporting (Part 2's input)
+
+The app reports handled errors — a `?bug=app` add that the backend rejects —
+to Backtrace, with a breadcrumb trail of what the user did first. That trail is
+what the crash compiler turns into a test.
+
+- `app/telemetry.config.js` holds the universe, the project and the
+  **submission token**. With the token empty, telemetry is off and the page
+  says so once in the console. `?bt=<token>` overrides it for one page load.
+- The SDK is vendored (`app/vendor/`), not loaded from a CDN — a grid run must
+  not depend on one.
+- The automatic breadcrumbs never carry typed values or `data-testid`, so the
+  actions add manual ones (`add todo · Buy milk · new-form`), the ring is 500
+  deep instead of 100, and the SDK's own traffic is filtered out of it.
+
+`npm run test:telemetry` proves the report's shape against a fake endpoint —
+no token, nothing sent. It is not one of the Sauce suites.
