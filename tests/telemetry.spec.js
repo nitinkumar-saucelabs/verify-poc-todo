@@ -93,3 +93,28 @@ test.describe('telemetry', () => {
     expect(reports).toHaveLength(0);
   });
 });
+
+test.describe('the submission token never reaches the crash data', () => {
+  test('it is stripped from the page url, the trail and the report', async ({ page }) => {
+    const reports = await captureReports(page);
+    // The token arrives on the URL so it need not live in this public repo —
+    // which puts it in location.href, and the SDK records that by itself.
+    await page.goto(appUrl('app', 'super-secret-token'));
+
+    await page.getByTestId('new-input').fill('Buy milk');
+    await page.getByTestId('add-button').click();
+    await expect(page.getByTestId('error')).toBeVisible();
+    await expect.poll(() => reports.length, { timeout: 10_000 }).toBeGreaterThan(0);
+
+    const { url, body } = reports[0];
+    // It is still the credential the report is SENT with — that is the point.
+    expect(url).toContain('super-secret-token');
+    // But it appears nowhere in what gets STORED, including the attributes the
+    // SDK adds itself, which scrubbing our own fields cannot reach.
+    expect(body).not.toContain('super-secret-token');
+    expect(body).toContain('"location.href":"http://localhost:8080/?bug=app"');
+    expect(body).toContain('"referrer":"http://localhost:8080/?bug=app"');
+    expect(body).toContain('pageUrl');
+    expect(body).toContain('Could not save todo (405)');
+  });
+});
