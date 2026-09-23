@@ -9,6 +9,8 @@
  *   ?bug=flaky     Complete silently fails some of the time-> FLAKE
  *   ?bug=selector  Add button's data-testid is renamed     -> TEST BUG
  *   ?bug=submit    Add button removed; Enter submits       -> TEST BUG (needs a model)
+ *   ?bug=render    a saved todo comes back with no title,  -> APP BUG, and the one
+ *                  and the renderer assumes one               whose fix is a guard
  *
  * Support parameters:
  *   ?seed=N        pre-populate N todos without using the Add path, so specs
@@ -106,6 +108,15 @@ async function addTodo(title) {
   if (config.bug === 'app') {
     await addRejectedByBackend(title); // throws; the item is never added
   }
+  if (config.bug === 'render') {
+    // The row the backend hands back is missing its title. The defect is the
+    // DATA, so the honest fix is a guard where it is read — which leaves this
+    // deliberate defect exactly where it is.
+    todos.push({ id: crypto.randomUUID(), done: false });
+    save();
+    render(); // throws in the renderer, not here
+    return;
+  }
   todos.push({ id: crypto.randomUUID(), title: title.trim(), done: false });
   telemetry.crumb('todo added', { count: todos.length });
   save();
@@ -165,7 +176,10 @@ function render() {
       const title = document.createElement('span');
       title.className = 'title';
       title.dataset.testid = 'todo-title';
-      title.textContent = todo.title;
+      // Assumes every todo has a title. Under ?bug=render one does not, and
+      // this throws — an ordinary crash on unexpected data, and the kind whose
+      // fix is a one-line guard rather than the removal of a feature.
+      title.textContent = todo.title.trim();
 
       const remove = document.createElement('button');
       remove.dataset.testid = 'delete';

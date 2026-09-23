@@ -7,7 +7,7 @@ The app is not the point. It is a controllable target with **known correct
 answers**, so the triage agent's accuracy can be measured instead of argued
 about.
 
-## The four variants
+## The variants
 
 | URL | What the app does | Correct verdict | Which specs fail |
 |---|---|---|---|
@@ -15,6 +15,8 @@ about.
 | `?bug=app` | Add posts to an endpoint that rejects; the item never appears | **APP BUG** | `add` |
 | `?bug=flaky` | Complete silently fails ~30% of the time | **FLAKE** | `complete`, sometimes `filter` |
 | `?bug=selector` | The add button's `data-testid` is renamed | **TEST BUG** | `add` |
+| `?bug=submit` | The add button is removed; Enter still submits | **TEST BUG** (only a model can fix it) | `add` |
+| `?bug=render` | A saved todo comes back without its title and the renderer assumes one | **APP BUG** | `add` |
 
 Support parameters: `?seed=N` pre-populates todos without using the Add path,
 so non-add specs still run under `?bug=app`; `?flakeRate=R` tunes the flake
@@ -23,6 +25,12 @@ real backend if you want a 500 instead of a 405.
 
 `add` fails under both `?bug=app` and `?bug=selector` on purpose: one test,
 two root causes, which is exactly the distinction triage has to make.
+
+`?bug=render` exists for Part 2 rather than for triage. It is the variant whose
+fix is a **guard** — the defect is the data the backend hands back, so adding
+`?? ''` where the title is read repairs the crash and leaves the deliberate
+defect in place. Under `?bug=app` the only one-line fix deletes the defect
+itself, which is why the crash compiler's patcher declined to write it.
 
 ## Running it
 
