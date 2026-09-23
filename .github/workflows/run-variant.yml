@@ -37,7 +37,11 @@ jobs:
         env:
           SAUCE_USERNAME: ${{ secrets.SAUCE_USERNAME }}
           SAUCE_ACCESS_KEY: ${{ secrets.SAUCE_ACCESS_KEY }}
-          BASE_URL: ${{ vars.BASE_URL }}
+          # The Backtrace submission token rides on the URL rather than living in
+          # app/telemetry.config.js: this repo is PUBLIC, and the token is a write
+          # credential for a project in Sauce's internal Backtrace tenant. With the
+          # secret unset the suites still run and telemetry is simply off.
+          BASE_URL: ${{ vars.BASE_URL }}${{ secrets.BACKTRACE_SUBMISSION_TOKEN && format('?bt={0}', secrets.BACKTRACE_SUBMISSION_TOKEN) || '' }}
           VARIANT: ${{ inputs.variant }}
           COMMIT_SHA: ${{ github.sha }}
           BUILD_TAG: manual-${{ github.run_id }}-${{ inputs.variant }}

@@ -1,11 +1,19 @@
 /**
  * Where this app reports errors (HLD Part 2: a production crash becomes a test).
  *
- * The submission token is the kind that ships in every browser bundle that
- * uses Backtrace — it can only POST reports. Leaving it empty keeps telemetry
- * OFF, which the page says once in the console. `?bt=<token>` on the URL
- * overrides it for a single page load, so a token can be tried before it is
- * committed, and the telemetry spec can run against a fake one.
+ * `submissionToken` is DELIBERATELY EMPTY and should stay that way.
+ *
+ * A Backtrace submission token is the kind that normally ships in a browser
+ * bundle — it can only POST reports. Two things make this one different: the
+ * repository is PUBLIC, and the project lives in Sauce's *internal* Backtrace
+ * tenant, so a committed token would let anyone on the internet write into an
+ * internal system, permanently, via git history. The cost of keeping it out is
+ * one CI secret; the cost of putting it in cannot be undone.
+ *
+ * So the token arrives on the URL instead — `?bt=<token>` — supplied by the
+ * workflows from `secrets.BACKTRACE_SUBMISSION_TOKEN`, or by hand for a local
+ * run. With no token telemetry is simply OFF and the page says so once, which
+ * is also the right default for anyone who stumbles across the Pages site.
  */
 export default {
   // The Sauce-internal Backtrace tenant, not our org's `sl-{orgId}` universe.
