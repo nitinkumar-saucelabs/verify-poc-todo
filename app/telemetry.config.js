@@ -8,7 +8,13 @@
  * committed, and the telemetry spec can run against a fake one.
  */
 export default {
-  universe: 'sl-7fb25570b4064716b9b6daae1a846790',
+  // The Sauce-internal Backtrace tenant, not our org's `sl-{orgId}` universe.
+  // Proven 23 Sept: a Sauce SSO token carries `universe: saucelabs`, which is
+  // the cohort sauce-mcp's Error Reporting allowlist enables — so the agent can
+  // read these errors, and their breadcrumbs, with no credential to paste and
+  // nothing to have switched on for us. Reporting into the `sl-` universe would
+  // put the crashes somewhere the agent cannot reach.
+  universe: 'saucelabs',
   project: 'verify-poc-todo',
   submissionToken: '',
   version: '1.1.0',

@@ -10,7 +10,7 @@ const { test, expect } = require('@playwright/test');
 const { BASE_URL } = require('./helpers');
 
 const SUBMIT = 'https://submit.backtrace.io/**';
-const UNIVERSE = 'sl-7fb25570b4064716b9b6daae1a846790';
+const UNIVERSE = 'saucelabs';
 
 function appUrl(bug, token = 'test-token') {
   const url = new URL(BASE_URL);
