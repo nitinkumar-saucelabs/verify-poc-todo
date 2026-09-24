@@ -25,6 +25,20 @@ rootDir: ./
 # nothing there) and VARIANT defaulting to `none` — a HEALTHY app. The
 # deliberate defect would vanish, the test would pass, and triage would read
 # that pass as "not deterministic, therefore FLAKE".
+#
+# Firefox runs on macOS, Chromium on Windows. That asymmetry is not a
+# preference — MEASURED 24 Sept 2026: Playwright 1.62.1 bundles Firefox 153,
+# which links msvcp140_1.dll, and that DLL is absent from BOTH Sauce Windows
+# images. Every Firefox job died before the browser opened:
+#
+#   Error: browserType.launch: Host system is missing dependencies!
+#     msvcp140_1.dll
+#
+# It cost 42 of 46 nightly defects and 82 wasted rerun jobs before anyone
+# noticed, because an unlaunched browser looks like an untriageable failure.
+# Sauce advertises playwright-firefox on Windows 10 and 11 for this version;
+# it does not work on either. Chromium is unaffected — it bundles its own
+# runtime. Move Firefox back once the Windows image ships the redistributable.
 suites:
   - name: add-chromium
     platformName: "Windows 11"
@@ -34,7 +48,7 @@ suites:
       BASE_URL: $BASE_URL
       VARIANT: $VARIANT
   - name: add-firefox
-    platformName: "Windows 11"
+    platformName: "macOS 14"
     testMatch: ["tests/add.spec.js"]
     params: { browserName: firefox, project: firefox }
     env:
@@ -49,7 +63,7 @@ suites:
       BASE_URL: $BASE_URL
       VARIANT: $VARIANT
   - name: complete-firefox
-    platformName: "Windows 11"
+    platformName: "macOS 14"
     testMatch: ["tests/complete.spec.js"]
     params: { browserName: firefox, project: firefox }
     env:
@@ -64,7 +78,7 @@ suites:
       BASE_URL: $BASE_URL
       VARIANT: $VARIANT
   - name: delete-firefox
-    platformName: "Windows 11"
+    platformName: "macOS 14"
     testMatch: ["tests/delete.spec.js"]
     params: { browserName: firefox, project: firefox }
     env:
@@ -79,7 +93,7 @@ suites:
       BASE_URL: $BASE_URL
       VARIANT: $VARIANT
   - name: filter-firefox
-    platformName: "Windows 11"
+    platformName: "macOS 14"
     testMatch: ["tests/filter.spec.js"]
     params: { browserName: firefox, project: firefox }
     env:
@@ -94,7 +108,7 @@ suites:
       BASE_URL: $BASE_URL
       VARIANT: $VARIANT
   - name: persist-firefox
-    platformName: "Windows 11"
+    platformName: "macOS 14"
     testMatch: ["tests/persist.spec.js"]
     params: { browserName: firefox, project: firefox }
     env:
@@ -109,7 +123,7 @@ suites:
       BASE_URL: $BASE_URL
       VARIANT: $VARIANT
   - name: empty-firefox
-    platformName: "Windows 11"
+    platformName: "macOS 14"
     testMatch: ["tests/empty.spec.js"]
     params: { browserName: firefox, project: firefox }
     env:
