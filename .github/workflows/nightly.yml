@@ -11,6 +11,22 @@ on:
     # overnight slot once the receiver is deployed somewhere always-on.
     - cron: '30 9 * * *'
   workflow_dispatch:
+    inputs:
+      # Sauce Verify dispatches this workflow and then has to find the jobs it
+      # started. GitHub's dispatch API returns NO run id, so `github.run_id` —
+      # which the schedule path uses below — cannot be known by the caller.
+      # The agent therefore mints a tag, passes it here, and polls Sauce for
+      # that build. Without this input a dispatched run is invisible to it.
+      build_tag:
+        description: "Build tag to report to Sauce (Verify sets this; leave blank for a manual run)"
+        required: false
+        type: string
+      variant:
+        description: "Which injected defect to run with"
+        required: false
+        default: all
+        type: choice
+        options: [all, none, app, flaky, selector, submit]
 
 jobs:
   suite:
@@ -18,7 +34,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [none, app, flaky, selector, submit]
+        # A scheduled run exercises every injected defect. A run started from
+        # the dashboard usually wants ONE, because the point is to see a
+        # result quickly — so the input narrows the matrix rather than being
+        # declared and ignored.
+        variant: ${{ fromJSON((github.event_name == 'schedule' || inputs.variant == '' || inputs.variant == 'all') && '["none","app","flaky","selector","submit"]' || format('["{0}"]', inputs.variant)) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -42,6 +62,8 @@ jobs:
           BASE_URL: ${{ vars.BASE_URL }}${{ secrets.BACKTRACE_SUBMISSION_TOKEN && format('?bt={0}', secrets.BACKTRACE_SUBMISSION_TOKEN) || '' }}
           VARIANT: ${{ matrix.variant }}
           COMMIT_SHA: ${{ github.sha }}
-          BUILD_TAG: nightly-${{ github.run_id }}-${{ matrix.variant }}
+          # A dispatched run carries the tag the caller chose; a scheduled
+          # one has no caller, so it falls back to the run id as before.
+          BUILD_TAG: ${{ inputs.build_tag && format('{0}-{1}', inputs.build_tag, matrix.variant) || format('nightly-{0}-{1}', github.run_id, matrix.variant) }}
         with:
           saucectl-version: latest
