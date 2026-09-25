@@ -29,7 +29,7 @@ const config = {
   bug: params.get('bug') || 'none',
   seed: Number(params.get('seed') || 0),
   flakeRate: Number(params.get('flakeRate') ?? 0.3),
-  api: params.get('api') || './api/todos',
+  api: params.get('api') || 'https://jsonplaceholder.typicode.com/todos',
 };
 
 let todos = [];
