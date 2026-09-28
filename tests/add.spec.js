@@ -6,7 +6,7 @@ test('adding a todo puts it in the list', async ({ page }) => {
   await openApp(page);
 
   await page.getByTestId('new-input').fill('Buy milk');
-  await page.getByTestId('add-button').click();
+  await page.getByTestId('new-input').press('Enter');
 
   await expect(page.getByTestId('todo-item')).toHaveCount(1);
   await expect(page.getByTestId('todo-title')).toHaveText('Buy milk');
