@@ -1,3 +1,10 @@
 {
-  "quarantined": []
+  "quarantined": [
+    {
+      "test": "complete-chromium",
+      "defect": "d-92f87e90",
+      "suite": "complete-chromium",
+      "reason": "Passed 1 of 2 reruns on the same commit and configuration. One pass on unchanged code disproves determinism."
+    }
+  ]
 }
