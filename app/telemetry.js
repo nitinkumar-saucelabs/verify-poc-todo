@@ -99,6 +99,18 @@ function submissionToken() {
   return new URLSearchParams(location.search).get('bt') || settings.submissionToken;
 }
 
+/**
+ * Which Backtrace universe to report into. `?universe=` wins over the config,
+ * like `?bt=`, so the same deployed page can report into `yolo` for the ER
+ * team's RCA without touching the `saucelabs` demo (ATT-64). Only a plain
+ * universe name is accepted: it becomes part of the submit URL's path, and a
+ * crafted value must not be able to point the report anywhere else.
+ */
+function universe() {
+  const asked = new URLSearchParams(location.search).get('universe');
+  return asked && /^[a-z0-9-]{1,64}$/.test(asked) ? asked : settings.universe;
+}
+
 function isOwnTraffic(crumb) {
   const url = String(crumb?.attributes?.url ?? '');
   return OWN_TRAFFIC.some((host) => url.includes(host));
@@ -117,7 +129,7 @@ export const telemetry = {
       return;
     }
     client = BacktraceClient.builder({
-      url: `https://submit.backtrace.io/${settings.universe}/${token}/json`,
+      url: `https://submit.backtrace.io/${universe()}/${token}/json`,
       name: settings.project,
       version: settings.version,
       userAttributes: {

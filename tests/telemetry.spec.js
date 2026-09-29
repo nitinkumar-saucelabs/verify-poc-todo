@@ -12,11 +12,21 @@ const { BASE_URL } = require('./helpers');
 const SUBMIT = 'https://submit.backtrace.io/**';
 const UNIVERSE = 'saucelabs';
 
-function appUrl(bug, token = 'test-token') {
+function appUrl(bug, token = 'test-token', universe = '') {
   const url = new URL(BASE_URL);
   url.searchParams.set('bug', bug);
   if (token) url.searchParams.set('bt', token);
+  if (universe) url.searchParams.set('universe', universe);
   return url.toString();
+}
+
+/** Reject an add and return the URL the first report was submitted to. */
+async function submittedTo(page, reports, url) {
+  await page.goto(url);
+  await page.getByTestId('new-input').fill('Buy milk');
+  await page.getByTestId('add-button').click();
+  await expect.poll(() => reports.length, { timeout: 10_000 }).toBeGreaterThan(0);
+  return reports[0].url;
 }
 
 /** Capture every report the page tries to submit, answering as Backtrace would. */
@@ -38,6 +48,20 @@ async function captureReports(page) {
 }
 
 test.describe('telemetry', () => {
+  // ATT-64: the same deployed page can report into the ER team's `yolo`
+  // universe, for their RCA, without changing the `saucelabs` demo.
+  test('?universe= chooses the universe the report goes to', async ({ page }) => {
+    const reports = await captureReports(page);
+    const url = await submittedTo(page, reports, appUrl('app', 'test-token', 'yolo'));
+    expect(url).toContain('submit.backtrace.io/yolo/test-token/json');
+  });
+
+  test('a universe that is not a plain name is ignored, never put in the URL', async ({ page }) => {
+    const reports = await captureReports(page);
+    const url = await submittedTo(page, reports, appUrl('app', 'test-token', 'evil.example/x'));
+    expect(url).toContain(`submit.backtrace.io/${UNIVERSE}/test-token/json`);
+  });
+
   test('a rejected add is reported with the request and the trail', async ({ page }) => {
     const reports = await captureReports(page);
     await page.goto(appUrl('app'));
