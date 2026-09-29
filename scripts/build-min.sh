@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The todo app as a customer ships it (ATT-75): one minified bundle.
 #
-#   app/min/app.min.js        debug id injected; its map is uploaded to Backtrace
-#   app/min-nomap/app.min.js  the same bundle with no debug id and no map anywhere
+#   app/min/        debug id injected; its map is uploaded to Backtrace
+#   app/min-nomap/  the same bundle with no debug id and no map anywhere
 #   symbols/app.min.js.map    the map, kept OUT of app/ so Pages never serves it —
 #                             deobfuscation has to come from the upload, not the page
 #
@@ -23,5 +23,16 @@ $ESBUILD --sourcemap=external --sources-content=true --outfile=app/min/app.min.j
 $BTJS process app/min --quiet
 mkdir -p symbols && mv app/min/app.min.js.map symbols/
 $ESBUILD --outfile=app/min-nomap/app.min.js
+
+# Each build gets its own page, so the default page keeps its static <script>
+# (a query-string loader would need a dynamic import, and `load` fires before
+# a dynamic import runs — the suite would click Add before it is wired).
+for build in min min-nomap; do
+  sed -e "s|<html lang=\"en\">|<html lang=\"en\" data-build=\"$build\">|" \
+      -e 's|href="style.css"|href="../style.css"|' \
+      -e 's|src="app.js"|src="app.min.js"|' app/index.html > "app/$build/index.html"
+  grep -q "data-build=\"$build\"" "app/$build/index.html"
+  grep -q 'src="app.min.js"' "app/$build/index.html"
+done
 
 grep -o 'debugId=[0-9a-f-]*' app/min/app.min.js

@@ -156,12 +156,12 @@ test.describe('minified builds', () => {
   async function reportFrom(page, build) {
     const reports = await captureReports(page);
     const url = new URL(appUrl('app'));
-    url.searchParams.set('build', build);
+    url.pathname = url.pathname.replace(/\/?$/, `/${build}/`);
     await submittedTo(page, reports, url.toString());
     return reports[0].body;
   }
 
-  test('?build=min names its debug id, so the uploaded map can be found', async ({ page }) => {
+  test('/min/ names its debug id, so the uploaded map can be found', async ({ page }) => {
     const body = await reportFrom(page, 'min');
     expect(body).toContain('"symbolication":"sourcemap"');
     expect(body).toContain(`"debug_identifier":"${debugId}"`);
@@ -170,7 +170,7 @@ test.describe('minified builds', () => {
     expect(body).toContain('Could not save todo (405)');
   });
 
-  test('?build=min-nomap is the same bundle with nothing to deobfuscate it', async ({ page }) => {
+  test('/min-nomap/ is the same bundle with nothing to deobfuscate it', async ({ page }) => {
     const body = await reportFrom(page, 'min-nomap');
     expect(body).not.toContain('"symbolication"');
     expect(body).not.toContain('debug_identifier');

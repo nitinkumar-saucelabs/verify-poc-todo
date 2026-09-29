@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-build="min">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Todo — Sauce Verify POC</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="../style.css">
 </head>
 <body>
   <main class="app">
@@ -32,6 +32,6 @@
   <!-- A module, so it can import the vendored Backtrace SDK. Deferred by
        definition, so the DOM is complete when init() runs — same timing as
        the classic script at the end of <body> it replaces. -->
-  <script type="module" src="app.js"></script>
+  <script type="module" src="app.min.js"></script>
 </body>
 </html>

@@ -222,7 +222,8 @@ function seedTodos(count) {
 }
 
 function init() {
-  telemetry.start({ variant: config.bug, build: params.get('build') || 'plain' });
+  // /min/ and /min-nomap/ are the minified builds (ATT-75): the page says which.
+  telemetry.start({ variant: config.bug, build: document.documentElement.dataset.build || 'plain' });
   document.querySelector('[data-testid="variant-banner"]').textContent =
     `bug=${config.bug}`;
 
