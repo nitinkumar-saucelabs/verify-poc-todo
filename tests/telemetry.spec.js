@@ -142,3 +142,51 @@ test.describe('the submission token never reaches the crash data', () => {
     expect(body).toContain('Could not save todo (405)');
   });
 });
+
+// ATT-75: the app as a customer ships it. `scripts/build-min.sh` makes both
+// bundles; the map is uploaded to Backtrace, which deobfuscates at ingest ONLY
+// when the report names the build — so that naming is what is tested here.
+test.describe('minified builds', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const root = path.join(__dirname, '..');
+  const debugId = fs.readFileSync(path.join(root, 'app/min/app.min.js'), 'utf8')
+    .match(/debugId=([0-9a-f-]+)/)[1];
+
+  async function reportFrom(page, build) {
+    const reports = await captureReports(page);
+    const url = new URL(appUrl('app'));
+    url.searchParams.set('build', build);
+    await submittedTo(page, reports, url.toString());
+    return reports[0].body;
+  }
+
+  test('?build=min names its debug id, so the uploaded map can be found', async ({ page }) => {
+    const body = await reportFrom(page, 'min');
+    expect(body).toContain('"symbolication":"sourcemap"');
+    expect(body).toContain(`"debug_identifier":"${debugId}"`);
+    expect(body).toContain('min/app.min.js');
+    expect(body).toContain('"build":"min"');
+    expect(body).toContain('Could not save todo (405)');
+  });
+
+  test('?build=min-nomap is the same bundle with nothing to deobfuscate it', async ({ page }) => {
+    const body = await reportFrom(page, 'min-nomap');
+    expect(body).not.toContain('"symbolication"');
+    expect(body).not.toContain('debug_identifier');
+    expect(body).toContain('min-nomap/app.min.js');
+    expect(body).toContain('"build":"min-nomap"');
+  });
+
+  test('the committed bundle was built from the app as it is now', () => {
+    // Edit app/ without re-running the build and the uploaded map describes
+    // code nobody ships: the crash would deobfuscate to the wrong lines.
+    const map = JSON.parse(fs.readFileSync(path.join(root, 'symbols/app.min.js.map'), 'utf8'));
+    expect(map.debugId).toBe(debugId);
+    map.sources.forEach((source, i) => {
+      const file = path.join(root, 'app/min', source);
+      expect(map.sourcesContent[i], `${source} changed since the build: run scripts/build-min.sh`)
+        .toBe(fs.readFileSync(file, 'utf8'));
+    });
+  });
+});

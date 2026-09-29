@@ -222,7 +222,7 @@ function seedTodos(count) {
 }
 
 function init() {
-  telemetry.start({ variant: config.bug });
+  telemetry.start({ variant: config.bug, build: params.get('build') || 'plain' });
   document.querySelector('[data-testid="variant-banner"]').textContent =
     `bug=${config.bug}`;
 

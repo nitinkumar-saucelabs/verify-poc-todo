@@ -32,6 +32,14 @@ fix is a **guard** — the defect is the data the backend hands back, so adding
 defect in place. Under `?bug=app` the only one-line fix deletes the defect
 itself, which is why the crash compiler's patcher declined to write it.
 
+`?build=min` serves the same app the way a customer ships it: one minified
+bundle (`app/min/`) whose source map is uploaded to Backtrace and never served,
+so a crash's frames come back readable only through the upload.
+`?build=min-nomap` is that bundle with no map anywhere — the case where symbols
+are missing. Both are built by `scripts/build-min.sh`; re-run it after any
+change to `app/` and upload `symbols/` (the command is in the script). A test
+fails if the committed bundle no longer matches the source.
+
 ## Running it
 
 ```bash

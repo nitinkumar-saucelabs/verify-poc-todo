@@ -31,7 +31,13 @@
   </main>
   <!-- A module, so it can import the vendored Backtrace SDK. Deferred by
        definition, so the DOM is complete when init() runs — same timing as
-       the classic script at the end of <body> it replaces. -->
-  <script type="module" src="app.js"></script>
+       the classic script at the end of <body> it replaces.
+       ?build=min loads the same app as a customer ships it: one minified
+       bundle whose source map is uploaded to Backtrace, not served.
+       ?build=min-nomap is that bundle with no map anywhere (ATT-75). -->
+  <script type="module">
+    const bundles = { min: './min/app.min.js', 'min-nomap': './min-nomap/app.min.js' };
+    import(bundles[new URLSearchParams(location.search).get('build')] ?? './app.js');
+  </script>
 </body>
 </html>
