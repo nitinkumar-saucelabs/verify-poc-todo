@@ -1,3 +1,10 @@
 {
-  "quarantined": []
+  "quarantined": [
+    {
+      "test": "complete-firefox",
+      "defect": "d-9972c4ce",
+      "suite": "complete-firefox",
+      "reason": "Passed 1 of 2 reruns of the same commit and configuration. One pass on unchanged code disproves determinism."
+    }
+  ]
 }
