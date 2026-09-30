@@ -67,3 +67,70 @@ jobs:
           BUILD_TAG: ${{ inputs.build_tag && format('{0}-{1}', inputs.build_tag, matrix.variant) || format('nightly-{0}-{1}', github.run_id, matrix.variant) }}
         with:
           saucectl-version: latest
+
+  # ATT-91 — the AI Authoring suite (Lane B). Its cases were recorded once on the
+  # healthy /verify/ page and replay the selectors they saw, so the defect cannot
+  # ride on the URL: this job deploys the night's variant to /verify/variant.json,
+  # waits until Pages serves it, then runs the suite under a build tag the agent
+  # can find. One variant per night — a single URL serves one app at a time.
+  ai-suite:
+    if: vars.VERIFY_SUITE_ID != '' && (github.event_name == 'schedule' || inputs.variant == '' || contains(fromJSON('["all","none","app","selector"]'), inputs.variant))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+    # Shares Pages with pages.yml; never cancel a deploy the suite is waiting on.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Choose the variant
+        id: variant
+        run: |
+          if [ -n "${{ inputs.variant }}" ] && [ "${{ inputs.variant }}" != "all" ]; then
+            v="${{ inputs.variant }}"
+          else
+            # Rotate by day of year, so three nights cover all three.
+            vs=(none selector app); v="${vs[$(( 10#$(date -u +%j) % 3 ))]}"
+          fi
+          echo "value=$v" >> "$GITHUB_OUTPUT"
+          echo "{\"bug\": \"$v\"}" > app/verify/variant.json
+          echo "variant for /verify/: $v"
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: app
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Wait until /verify/ serves the variant
+        run: |
+          url="${{ vars.BASE_URL }}"; url="${url%/}/verify/variant.json"
+          for i in $(seq 1 60); do
+            if curl -fsS "$url?t=$(date +%s)" | grep -q "\"${{ steps.variant.outputs.value }}\""; then
+              echo "live after ${i}x5s"; exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::/verify/ never served variant ${{ steps.variant.outputs.value }}"; exit 1
+
+      - name: Run the suite
+        env:
+          SAUCE_USERNAME: ${{ secrets.SAUCE_USERNAME }}
+          SAUCE_ACCESS_KEY: ${{ secrets.SAUCE_ACCESS_KEY }}
+          # Same tag scheme as the Playwright jobs, so the agent's run tracking
+          # (prefix match on the tag it minted) sees both suites as one run.
+          BUILD_TAG: ${{ inputs.build_tag && format('{0}-ai-{1}', inputs.build_tag, steps.variant.outputs.value) || format('nightly-{0}-ai-{1}', github.run_id, steps.variant.outputs.value) }}
+        run: |
+          body=$(printf '{"buildName": "%s"}' "$BUILD_TAG")
+          reply=$(curl -sS -w '\n%{http_code}' -u "$SAUCE_USERNAME:$SAUCE_ACCESS_KEY" \
+            -H 'Content-Type: application/json' -d "$body" \
+            "https://api.us-west-1.saucelabs.com/v1/ai-authoring/testsuites/${{ vars.VERIFY_SUITE_ID }}/run")
+          code=$(echo "$reply" | tail -1); echo "$reply" | head -1
+          [ "$code" = "200" ] || { echo "::error::suite run answered $code"; exit 1; }
