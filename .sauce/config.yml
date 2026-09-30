@@ -129,6 +129,13 @@ suites:
     env:
       BASE_URL: $BASE_URL
       VARIANT: $VARIANT
+  - name: generated-delete-a-complete-todo-chromium
+    platformName: "Windows 11"
+    testMatch: ["tests/delete-a-complete-todo.spec.js"]
+    params: { browserName: chromium, project: chromium }
+    env:
+      BASE_URL: $BASE_URL
+      VARIANT: $VARIANT
 
 artifacts:
   download:
