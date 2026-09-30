@@ -33,5 +33,8 @@
        definition, so the DOM is complete when init() runs — same timing as
        the classic script at the end of <body> it replaces. -->
   <script type="module" src="../app.js"></script>
+  <!-- ATT-90 phase 2: the page changes under a fixed URL. Runs after app.js
+       (module scripts execute in order), as ?bug=selector does. -->
+  <script type="module">document.querySelector('[data-testid="add-button"]')?.setAttribute('data-testid', 'submit-button');</script>
 </body>
 </html>
