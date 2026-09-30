@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Todo — Sauce Verify POC</title>
+<link rel="stylesheet" href="../style.css">
+<!-- /verify/ is the page the AI Authoring suite is recorded on (ATT-91). A recording
+     keeps its URL for ever and replays the selectors it saw, so the defect cannot
+     ride on the URL the way ?bug= does for the Playwright suite: the page has to
+     change under a fixed URL, as a customer's app does. The variant comes from
+     variant.json, written and deployed by the nightly before the suite runs.
+     Read synchronously here, before the module below, so the app starts with it
+     and keeps its static script (a dynamic import races the load event). -->
+<script>
+  (function () {
+    if (/[?&]bug=/.test(location.search)) return;
+    var bug = 'none';
+    try {
+      var x = new XMLHttpRequest();
+      x.open('GET', 'variant.json?t=' + Date.now(), false);
+      x.send();
+      if (x.status === 200) bug = String(JSON.parse(x.responseText).bug || 'none');
+    } catch (e) { /* no file: the healthy app */ }
+    if (!/^[a-z]{1,20}$/.test(bug)) bug = 'none';
+    var q = new URLSearchParams(location.search); q.set('bug', bug);
+    history.replaceState(null, '', location.pathname + '?' + q + location.hash);
+  })();
+</script>
+</head>
+<body>
+  <main class="app">
+    <h1>Todo</h1>
+    <p class="variant" data-testid="variant-banner"></p>
+
+    <form class="new" data-testid="new-form">
+      <input data-testid="new-input" autocomplete="off" placeholder="What needs doing?" aria-label="New todo">
+      <button type="submit" data-testid="add-button">Add</button>
+    </form>
+
+    <p class="error" data-testid="error" hidden></p>
+
+    <ul class="list" data-testid="todo-list"></ul>
+
+    <p class="empty" data-testid="empty-state" hidden>Nothing here yet.</p>
+
+    <footer class="filters">
+      <button data-testid="filter-all" data-filter="all">All</button>
+      <button data-testid="filter-active" data-filter="active">Active</button>
+      <button data-testid="filter-completed" data-filter="completed">Completed</button>
+      <span data-testid="count"></span>
+    </footer>
+  </main>
+  <!-- A module, so it can import the vendored Backtrace SDK. Deferred by
+       definition, so the DOM is complete when init() runs — same timing as
+       the classic script at the end of <body> it replaces. -->
+  <script type="module" src="../app.js"></script>
+</body>
+</html>
