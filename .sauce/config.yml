@@ -129,6 +129,13 @@ suites:
     env:
       BASE_URL: $BASE_URL
       VARIANT: $VARIANT
+  - name: generated-adding-a-todo-puts-it-chromium
+    platformName: "Windows 11"
+    testMatch: ["tests/adding-a-todo-puts-it.spec.js"]
+    params: { browserName: chromium, project: chromium }
+    env:
+      BASE_URL: $BASE_URL
+      VARIANT: $VARIANT
 
 artifacts:
   download:
