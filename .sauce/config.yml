@@ -129,6 +129,13 @@ suites:
     env:
       BASE_URL: $BASE_URL
       VARIANT: $VARIANT
+  - name: generated-add-two-todos-buy-milk-chromium
+    platformName: "Windows 11"
+    testMatch: ["tests/add-two-todos-buy-milk.spec.js"]
+    params: { browserName: chromium, project: chromium }
+    env:
+      BASE_URL: $BASE_URL
+      VARIANT: $VARIANT
 
 artifacts:
   download:
