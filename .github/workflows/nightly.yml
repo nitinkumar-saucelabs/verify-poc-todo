@@ -46,12 +46,18 @@ jobs:
           node-version: 22
       - run: npm ci
 
+      # saucectl is installed by tag, straight from the release download URL.
+      # The saucectl-run-action resolved "latest" through the GitHub API with
+      # no token, and on a busy shared runner that call is rate-limited — the
+      # action then logged the error and still reported SUCCESS with zero
+      # Sauce jobs (seen 30 Sep and 1 Oct). A failed install here is a red job.
+      - name: Install saucectl
+        run: curl -fsSL https://saucelabs.github.io/saucectl/install | sudo bash -s -- -b /usr/local/bin v0.205.1
+
       - name: Run suite on Sauce
         # Variants other than `none` fail on purpose; the triage agent is the
         # consumer of those failures, so a red suite must not fail the job.
-        # The action has no ignore-failure input, so this is how it is done.
         continue-on-error: true
-        uses: saucelabs/saucectl-run-action@v4
         env:
           SAUCE_USERNAME: ${{ secrets.SAUCE_USERNAME }}
           SAUCE_ACCESS_KEY: ${{ secrets.SAUCE_ACCESS_KEY }}
@@ -65,8 +71,7 @@ jobs:
           # A dispatched run carries the tag the caller chose; a scheduled
           # one has no caller, so it falls back to the run id as before.
           BUILD_TAG: ${{ inputs.build_tag && format('{0}-{1}', inputs.build_tag, matrix.variant) || format('nightly-{0}-{1}', github.run_id, matrix.variant) }}
-        with:
-          saucectl-version: latest
+        run: saucectl run --config .sauce/config.yml
 
   # ATT-91 — the AI Authoring suite (Lane B). Its cases were recorded once on the
   # healthy /verify/ page and replay the selectors they saw, so the defect cannot
