@@ -223,7 +223,14 @@ function seedTodos(count) {
 
 function init() {
   // /min/ and /min-nomap/ are the minified builds (ATT-75): the page says which.
-  telemetry.start({ variant: config.bug, build: document.documentElement.dataset.build || 'plain' });
+  // environment and commit come from build-info.json (see index.html); absent on a site without one.
+  const { environment, commit } = document.documentElement.dataset;
+  telemetry.start({
+    variant: config.bug,
+    build: document.documentElement.dataset.build || 'plain',
+    ...(environment && { environment }),
+    ...(commit && { commit }),
+  });
   document.querySelector('[data-testid="variant-banner"]').textContent =
     `bug=${config.bug}`;
 
