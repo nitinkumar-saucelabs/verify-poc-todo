@@ -5,6 +5,23 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Todo — Sauce Verify POC</title>
 <link rel="stylesheet" href="../style.css">
+<script>
+  // A page deployed by the lifecycle's script has build-info.json beside it
+  // ({environment, commit, deployed_at}); telemetry reports both on every crash.
+  // Synchronous so it is on <html> before the module runs, and without a
+  // cache-buster so it ages with app.js at the Pages edge. A missing or
+  // non-JSON file means no attributes.
+  try {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', 'build-info.json', false);
+    xhr.send();
+    if (xhr.status === 200) {
+      var info = JSON.parse(xhr.responseText);
+      if (info && typeof info.environment === 'string') document.documentElement.dataset.environment = info.environment;
+      if (info && typeof info.commit === 'string') document.documentElement.dataset.commit = info.commit;
+    }
+  } catch (e) { /* no build-info: nothing to report */ }
+</script>
 </head>
 <body>
   <main class="app">
