@@ -113,4 +113,4 @@ what the crash compiler turns into a test.
   deep instead of 100, and the SDK's own traffic is filtered out of it.
 
 `npm run test:telemetry` proves the report's shape against a fake endpoint —
-no token, nothing sent. It is not one of the Sauce suites.
+no token, nothing sent. It is not one of the Sauce suites..
