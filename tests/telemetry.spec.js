@@ -190,3 +190,69 @@ test.describe('minified builds', () => {
     });
   });
 });
+
+// crash-lifecycle: a page served by the lifecycle's deploy script has a
+// `build-info.json` next to it ({environment, commit, deployed_at}). The page
+// reads it BEFORE the app starts and reports `environment` and `commit` on every
+// crash, which is how the agent tells a prod crash from a preprod one and which
+// build it came from. Nitin's own Pages site has no such file, and for it nothing
+// changes: a missing file means no attributes, not an error.
+test.describe('environment and commit attributes', () => {
+  const BUILD_INFO = '**/build-info.json';
+  const info = { environment: 'preprod', commit: '3f2c9d0e8a1b4c5d6e7f8091a2b3c4d5e6f70812', deployed_at: '2026-10-05T10:00:00Z' };
+
+  test('are reported when build-info.json is served', async ({ page }) => {
+    const reports = await captureReports(page);
+    await page.route(BUILD_INFO, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(info) }));
+
+    await submittedTo(page, reports, appUrl('app'));
+
+    expect(reports[0].body).toContain('"environment":"preprod"');
+    expect(reports[0].body).toContain(`"commit":"${info.commit}"`);
+  });
+
+  test('are on the page before the app runs, for anything else that wants them', async ({ page }) => {
+    await page.route(BUILD_INFO, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(info) }));
+    await page.goto(appUrl('none'));
+
+    await expect(page.locator('html')).toHaveAttribute('data-environment', 'preprod');
+    await expect(page.locator('html')).toHaveAttribute('data-commit', info.commit);
+  });
+
+  // GUARD (green before the change, must stay green): Nitin's site must be untouched.
+  test('guard: are absent when there is no build-info.json (Nitin\'s site)', async ({ page }) => {
+    const reports = await captureReports(page);
+    await page.route(BUILD_INFO, (route) => route.fulfill({ status: 404, body: 'not found' }));
+
+    await submittedTo(page, reports, appUrl('app'));
+
+    expect(reports[0].body).toContain('Could not save todo (405)');
+    expect(reports[0].body).not.toContain('"environment"');
+    expect(reports[0].body).not.toContain('"commit"');
+  });
+
+  // GUARD (green before the change, must stay green): a bad file is ignored, never an error.
+  test('guard: a build-info.json that is not JSON is ignored, never an error', async ({ page }) => {
+    const reports = await captureReports(page);
+    await page.route(BUILD_INFO, (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<html>not json</html>' }));
+
+    await submittedTo(page, reports, appUrl('app'));
+
+    expect(reports[0].body).toContain('Could not save todo (405)');
+    expect(reports[0].body).not.toContain('"environment"');
+  });
+
+  test('build-info.json is asked for without a cache-buster', async ({ page }) => {
+    // The page must see what a fresh visitor sees: Pages' edge caches app.js for
+    // ten minutes, and build-info has to age with it, so a stale page reports
+    // the commit it really is.
+    const asked = [];
+    page.on('request', (request) => { if (request.url().includes('build-info.json')) asked.push(request.url()); });
+    await page.route(BUILD_INFO, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(info) }));
+
+    await page.goto(appUrl('none'));
+
+    expect(asked.length).toBeGreaterThan(0);
+    for (const url of asked) expect(new URL(url).search, url).toBe('');
+  });
+});
