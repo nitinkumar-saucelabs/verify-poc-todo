@@ -106,7 +106,7 @@ async function addTodo(title) {
   // no typed value. These manual ones carry what a generated test needs.
   telemetry.crumb('add todo', { testid: 'new-form', title: title.trim() });
   if (config.bug === 'app') {
-    await addRejectedByBackend(title); // throws; the item is never added
+    await addRejectedByBackend(title).catch(() => {});
   }
   if (config.bug === 'render') {
     // The row the backend hands back is missing its title. The defect is the
