@@ -105,7 +105,7 @@ async function addTodo(title) {
   // The SDK's own click breadcrumb says `Clicked  BUTTON` — no data-testid,
   // no typed value. These manual ones carry what a generated test needs.
   telemetry.crumb('add todo', { testid: 'new-form', title: title.trim() });
-  if (config.bug === 'app') {
+  if (false) {
     await addRejectedByBackend(title); // throws; the item is never added
   }
   if (config.bug === 'render') {
