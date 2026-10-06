@@ -1,4 +1,6 @@
 name: Deploy app to Pages
+# Sauce Verify finds a preview's run by this name.
+run-name: ${{ inputs.preview_ref && format('Preview {0}', inputs.preview_ref) || 'Deploy app to Pages' }}
 
 on:
   push:
@@ -11,6 +13,20 @@ on:
       # committed variant.json ("none").
       variant:
         description: Bug the /verify/ page plants
+        type: choice
+        options: [none, selector, submit, app, flaky]
+        default: none
+      # Sauce Verify's proof of an app fix: the fix branch's app is published
+      # beside the live one at /preview/<its 12-character commit>/, so AI
+      # Authoring can walk a test on the fixed app before anything is merged.
+      # Pages deploys only from main, so main's workflow publishes it. A new
+      # path has nothing cached, unlike the live pages (max-age=600).
+      preview_ref:
+        description: Branch or commit to publish at /preview/<commit>/ (blank for none)
+        type: string
+        default: ''
+      preview_variant:
+        description: Bug the preview's /verify/ page plants
         type: choice
         options: [none, selector, submit, app, flaky]
         default: none
@@ -37,6 +53,20 @@ jobs:
         run: |
           echo "{\"bug\": \"${{ inputs.variant }}\"}" > app/verify/variant.json
           cat app/verify/variant.json
+      - name: Publish the preview
+        if: github.event_name == 'workflow_dispatch' && inputs.preview_ref != ''
+        env:
+          REF: ${{ inputs.preview_ref }}
+          BUG: ${{ inputs.preview_variant }}
+        run: |
+          [[ "$REF" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "::error::not a branch or commit: $REF"; exit 1; }
+          git fetch --no-tags --depth=1 origin "$REF"
+          sha=$(git rev-parse FETCH_HEAD | cut -c1-12)
+          mkdir -p "app/preview/$sha" /tmp/preview
+          git archive FETCH_HEAD app | tar -x -C /tmp/preview
+          cp -R /tmp/preview/app/. "app/preview/$sha/"
+          echo "{\"bug\": \"$BUG\"}" > "app/preview/$sha/verify/variant.json"
+          echo "preview of $REF at preview/$sha/ — /verify/ plants $BUG"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
