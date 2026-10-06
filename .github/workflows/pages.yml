@@ -5,6 +5,15 @@ on:
     branches: [main]
     paths: ['app/**', '.github/workflows/pages.yml']
   workflow_dispatch:
+    inputs:
+      # Sauce Verify's Runs → Plant: the bug /verify/ serves to the AI Authoring
+      # tests recorded there, until another is planted. A push deploys the
+      # committed variant.json ("none").
+      variant:
+        description: Bug the /verify/ page plants
+        type: choice
+        options: [none, selector, submit, app, flaky]
+        default: none
 
 permissions:
   contents: read
@@ -23,6 +32,11 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - name: Plant the bug /verify/ serves
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "{\"bug\": \"${{ inputs.variant }}\"}" > app/verify/variant.json
+          cat app/verify/variant.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
