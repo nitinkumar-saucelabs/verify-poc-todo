@@ -136,6 +136,13 @@ suites:
     env:
       BASE_URL: $BASE_URL
       VARIANT: $VARIANT
+  - name: generated-crash-d-c65c93dc-chromium
+    platformName: "Windows 11"
+    testMatch: ["tests/crash-d-c65c93dc.spec.js"]
+    params: { browserName: chromium, project: chromium }
+    env:
+      BASE_URL: $BASE_URL
+      VARIANT: $VARIANT
 
 artifacts:
   download:
