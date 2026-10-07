@@ -113,6 +113,17 @@ jobs:
           path: app
       - id: deployment
         uses: actions/deploy-pages@v4
+        # GitHub sometimes loses the just-uploaded artifact's metadata for a
+        # moment ("No artifacts named github-pages were found" / "Fetching
+        # artifact metadata failed") — 5 Oct, twice on 6 Oct, one of them the
+        # nightly. The artifact IS there; a second deploy a little later works.
+        continue-on-error: true
+      - name: Retry the Pages deploy once
+        if: steps.deployment.outcome == 'failure'
+        run: sleep 30
+      - id: deployment-retry
+        if: steps.deployment.outcome == 'failure'
+        uses: actions/deploy-pages@v4
 
       - name: Wait until /verify/ serves the variant
         run: |
