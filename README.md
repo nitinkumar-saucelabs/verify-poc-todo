@@ -12,16 +12,16 @@ about.
 | URL | What the app does | Correct verdict | Which specs fail |
 |---|---|---|---|
 | `?bug=none` | Everything works | green | none |
-| `?bug=app` | Add posts to an endpoint that rejects; the item never appears | **APP BUG** | `add` |
+| `?bug=app` | The backend refuses every save (500); the item never appears | **APP BUG** | `add` |
 | `?bug=flaky` | Complete silently fails ~30% of the time | **FLAKE** | `complete`, sometimes `filter` |
 | `?bug=selector` | The add button's `data-testid` is renamed | **TEST BUG** | `add` |
 | `?bug=submit` | The add button is removed; Enter still submits | **TEST BUG** (only a model can fix it) | `add` |
-| `?bug=render` | A saved todo comes back without its title and the renderer assumes one | **APP BUG** | `add` |
+| `?bug=render` | The backend hands a saved todo back without its title and the renderer assumes one | **APP BUG** | `add` |
 
 Support parameters: `?seed=N` pre-populates todos without using the Add path,
 so non-add specs still run under `?bug=app`; `?flakeRate=R` tunes the flake
-rate for calibrating the rerun cap; `?api=URL` points the app variant at a
-real backend if you want a 500 instead of a 405.
+rate for calibrating the rerun cap; `?api=URL` points the page at another
+backend (https, or http on localhost).
 
 `add` fails under both `?bug=app` and `?bug=selector` on purpose: one test,
 two root causes, which is exactly the distinction triage has to make.
@@ -40,6 +40,29 @@ are missing. Both are built by `scripts/build-min.sh`; re-run it after any
 change to `app/` and upload `symbols/` (the command is in the script). A test
 fails if the committed bundle no longer matches the source.
 
+## The backend
+
+The todos live on a backend (`server/`, Node 22.13+, no dependencies: the
+database is one SQLite file through `node:sqlite`). The page calls it across
+origins at `https://todo-api.136.66.24.255.nip.io/api`, on the Sauce Verify VM.
+
+- **Sessions.** Each browser tab makes an id (sessionStorage) and sends it as
+  `X-Todo-Session`; rows belong to it and are swept a day later. The nightly
+  runs ~65 jobs at once, and without sessions they would share one list.
+- **Defects.** The page sends its `?bug=` as `X-Todo-Bug`. `app` and `render`
+  are the backend's defects (`server/todos.mjs`), so a fix to them is a fix to
+  the backend; `selector`, `submit` and `flaky` stay the page's.
+- **Previews.** With `PREVIEW_TOKEN` set, the backend also starts a
+  `sauce-verify/fix-*` branch's own backend on request (`POST /previews`) and
+  serves it at `/preview/<commit>/`. Sauce Verify uses it to prove a fix to the
+  backend: the Pages preview's `variant.json` names that backend as `api`
+  (`pages.yml` input `preview_api`), and AI Authoring walks the pair.
+
+```bash
+npm run server                 # http://127.0.0.1:8095, server/todos.db
+npm run test:server            # its tests: node --test
+```
+
 ## Running it
 
 ```bash
@@ -47,7 +70,9 @@ npm install
 npx playwright install chromium
 
 npm run serve                      # http://localhost:8080
-BASE_URL=http://localhost:8080 npm run test:none      # 6 pass
+npm run server                     # the backend, http://127.0.0.1:8095
+export API_URL=http://localhost:8095/api   # or the tests call the live backend
+BASE_URL=http://localhost:8080 npm run test:none      # all pass
 BASE_URL=http://localhost:8080 npm run test:app       # only add fails
 BASE_URL=http://localhost:8080 npm run test:selector  # only add fails
 BASE_URL=http://localhost:8080 npm run test:flaky     # complete is mixed

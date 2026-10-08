@@ -30,6 +30,13 @@ on:
         type: choice
         options: [none, selector, submit, app, flaky]
         default: none
+      # A fix to the BACKEND (8 Oct): the backend Sauce Verify started at that
+      # branch, which the preview's /verify/ page calls instead of the live one.
+      preview_api:
+        description: Backend API the preview's /verify/ page calls (https; blank for the live one)
+        type: string
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -58,15 +65,21 @@ jobs:
         env:
           REF: ${{ inputs.preview_ref }}
           BUG: ${{ inputs.preview_variant }}
+          API: ${{ inputs.preview_api }}
         run: |
           [[ "$REF" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "::error::not a branch or commit: $REF"; exit 1; }
+          [[ -z "$API" || "$API" =~ ^https://[A-Za-z0-9.-]+(/[A-Za-z0-9._/-]*)?$ ]] || { echo "::error::not an https API: $API"; exit 1; }
           git fetch --no-tags --depth=1 origin "$REF"
           sha=$(git rev-parse FETCH_HEAD | cut -c1-12)
           mkdir -p "app/preview/$sha" /tmp/preview
           git archive FETCH_HEAD app | tar -x -C /tmp/preview
           cp -R /tmp/preview/app/. "app/preview/$sha/"
-          echo "{\"bug\": \"$BUG\"}" > "app/preview/$sha/verify/variant.json"
-          echo "preview of $REF at preview/$sha/ — /verify/ plants $BUG"
+          if [ -n "$API" ]; then
+            echo "{\"bug\": \"$BUG\", \"api\": \"$API\"}" > "app/preview/$sha/verify/variant.json"
+          else
+            echo "{\"bug\": \"$BUG\"}" > "app/preview/$sha/verify/variant.json"
+          fi
+          echo "preview of $REF at preview/$sha/ — /verify/ plants $BUG${API:+, calls $API}"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

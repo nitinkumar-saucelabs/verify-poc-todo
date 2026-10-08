@@ -7,7 +7,7 @@
  * target; this proves the report's shape, which is a different question.
  */
 const { test, expect } = require('@playwright/test');
-const { BASE_URL } = require('./helpers');
+const { API_URL, BASE_URL } = require('./helpers');
 
 const SUBMIT = 'https://submit.backtrace.io/**';
 const UNIVERSE = 'saucelabs';
@@ -15,6 +15,7 @@ const UNIVERSE = 'saucelabs';
 function appUrl(bug, token = 'test-token', universe = '') {
   const url = new URL(BASE_URL);
   url.searchParams.set('bug', bug);
+  if (API_URL) url.searchParams.set('api', API_URL);
   if (token) url.searchParams.set('bt', token);
   if (universe) url.searchParams.set('universe', universe);
   return url.toString();
@@ -76,7 +77,7 @@ test.describe('telemetry', () => {
 
     // The error, and the request that caused it — the same facts the triage
     // rules take from the HAR.
-    expect(body).toContain('Could not save todo (405)');
+    expect(body).toContain('Could not save todo (500)');
     expect(body).toContain('api.status');
     expect(body).toContain('/api/todos');
     expect(body).toContain('"variant":"app"');
@@ -136,10 +137,11 @@ test.describe('the submission token never reaches the crash data', () => {
     // But it appears nowhere in what gets STORED, including the attributes the
     // SDK adds itself, which scrubbing our own fields cannot reach.
     expect(body).not.toContain('super-secret-token');
-    expect(body).toContain('"location.href":"http://localhost:8080/?bug=app"');
-    expect(body).toContain('"referrer":"http://localhost:8080/?bug=app"');
+    // A prefix: a local run adds its backend as &api=… after the bug.
+    expect(body).toContain('"location.href":"http://localhost:8080/?bug=app');
+    expect(body).toContain('"referrer":"http://localhost:8080/?bug=app');
     expect(body).toContain('pageUrl');
-    expect(body).toContain('Could not save todo (405)');
+    expect(body).toContain('Could not save todo (500)');
   });
 });
 
@@ -167,7 +169,7 @@ test.describe('minified builds', () => {
     expect(body).toContain(`"debug_identifier":"${debugId}"`);
     expect(body).toContain('min/app.min.js');
     expect(body).toContain('"build":"min"');
-    expect(body).toContain('Could not save todo (405)');
+    expect(body).toContain('Could not save todo (500)');
   });
 
   test('/min-nomap/ is the same bundle with nothing to deobfuscate it', async ({ page }) => {

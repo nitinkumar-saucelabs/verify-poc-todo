@@ -5,73 +5,95 @@
  * is known in advance:
  *
  *   ?bug=none      everything works                        -> green
- *   ?bug=app       Add posts to an endpoint that rejects   -> APP BUG
+ *   ?bug=app       the backend refuses every save (500)    -> APP BUG
  *   ?bug=flaky     Complete silently fails some of the time-> FLAKE
  *   ?bug=selector  Add button's data-testid is renamed     -> TEST BUG
  *   ?bug=submit    Add button removed; Enter submits       -> TEST BUG (needs a model)
- *   ?bug=render    a saved todo comes back with no title,  -> APP BUG, and the one
- *                  and the renderer assumes one               whose fix is a guard
+ *   ?bug=render    the backend hands a saved todo back     -> APP BUG, and the one
+ *                  with no title; the renderer assumes one    whose fix is a guard
+ *
+ * The todos live on a backend (server/, 8 Oct), in a session per browser tab;
+ * `app` and `render` are the backend's defects, told which one by the
+ * X-Todo-Bug header, the others are this page's.
  *
  * Support parameters:
  *   ?seed=N        pre-populate N todos without using the Add path, so specs
  *                  that are not about adding still run under ?bug=app.
  *   ?flakeRate=R   failure probability for ?bug=flaky (default 0.3).
- *   ?api=URL       endpoint the ?bug=app variant posts to. Default is a
- *                  relative path, which static hosting answers 405.
+ *   ?api=URL       the backend's API base (https, or http on localhost). The
+ *                  /verify/ page takes it from variant.json — a fix's preview
+ *                  points it at the fix's own backend.
  */
 
 import { telemetry } from './telemetry.js';
 
-const STORAGE_KEY = 'verify-poc-todos';
+/** The live backend, on the Sauce Verify VM. */
+const DEFAULT_API = 'https://todo-api.136.66.24.255.nip.io/api';
+const SESSION_KEY = 'verify-poc-session';
 
 const params = new URLSearchParams(location.search);
 const config = {
   bug: params.get('bug') || 'none',
   seed: Number(params.get('seed') || 0),
   flakeRate: Number(params.get('flakeRate') ?? 0.3),
-  api: params.get('api') || './api/todos',
+  api: apiBase(params.get('api')),
 };
+
+/** ?api=, if it is a backend this page may talk to; the live one otherwise. */
+function apiBase(given) {
+  try {
+    const url = new URL(given);
+    const local = url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(url.hostname);
+    if (url.protocol === 'https:' || local) return url.href.replace(/\/$/, '');
+  } catch {
+    /* absent or not a URL */
+  }
+  return DEFAULT_API;
+}
+
+/** One session per tab: a reload keeps the list, a new test's browser starts empty. */
+function session() {
+  try {
+    let id = sessionStorage.getItem(SESSION_KEY);
+    if (!id) {
+      id = crypto.randomUUID();
+      sessionStorage.setItem(SESSION_KEY, id);
+    }
+    return id;
+  } catch {
+    return (window.__verifySession ??= crypto.randomUUID()); // storage blocked: this page load only
+  }
+}
 
 let todos = [];
 let filter = 'all';
 
-/* ---------- persistence ---------- */
+/* ---------- the backend ---------- */
 
-function load() {
+/**
+ * One request. Throws an Error a person can read, carrying the request that
+ * failed — the report names it, the way the triage rules name it from the HAR.
+ */
+async function request(method, path, body, failed) {
+  const url = `${config.api}${path}`;
+  let response;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    response = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'X-Todo-Session': session(), 'X-Todo-Bug': config.bug },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
   } catch {
-    return [];
+    throw Object.assign(new Error('Could not reach the server'), { apiPath: new URL(url).pathname, apiStatus: 0 });
   }
-}
-
-function save() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
-  } catch {
-    /* private mode: in-memory only */
+  if (!response.ok) {
+    throw Object.assign(new Error(`${failed} (${response.status})`),
+                        { apiPath: new URL(url).pathname, apiStatus: response.status });
   }
+  return response.status === 204 ? null : response.json();
 }
 
 /* ---------- defects ---------- */
-
-/** ?bug=app: the Add path calls a backend that rejects, so nothing is added. */
-async function addRejectedByBackend(title) {
-  const response = await fetch(config.api, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title }),
-  });
-  if (!response.ok) {
-    // Carried on the error so the report can name the request, the way the
-    // triage rules name it from the HAR.
-    const error = new Error(`Could not save todo (${response.status})`);
-    error.apiPath = new URL(config.api, location.href).pathname;
-    error.apiStatus = response.status;
-    throw error;
-  }
-}
 
 /** ?bug=flaky: Complete fails part of the time, on unchanged code. */
 function completeSilentlyFails() {
@@ -105,40 +127,44 @@ async function addTodo(title) {
   // The SDK's own click breadcrumb says `Clicked  BUTTON` — no data-testid,
   // no typed value. These manual ones carry what a generated test needs.
   telemetry.crumb('add todo', { testid: 'new-form', title: title.trim() });
-  if (config.bug === 'app') {
-    await addRejectedByBackend(title); // throws; the item is never added
-  }
-  if (config.bug === 'render') {
-    // The row the backend hands back is missing its title. The defect is the
-    // DATA, so the honest fix is a guard where it is read — which leaves this
-    // deliberate defect exactly where it is.
-    todos.push({ id: crypto.randomUUID(), done: false });
-    save();
-    render(); // throws in the renderer, not here
-    return;
-  }
-  todos.push({ id: crypto.randomUUID(), title: title.trim(), done: false });
+  // Under ?bug=app the backend refuses this (500); under ?bug=render it hands
+  // the row back without its title — the defect is the DATA, so the honest fix
+  // is a guard where it is read, and render() is where it throws.
+  const saved = await request('POST', '/todos', { title: title.trim() }, 'Could not save todo');
+  todos.push(saved);
   telemetry.crumb('todo added', { count: todos.length });
-  save();
   render();
 }
 
-function toggleTodo(id) {
-  if (completeSilentlyFails()) return; // no state change, no error shown
+async function toggleTodo(id) {
   const todo = todos.find((t) => t.id === id);
   if (!todo) return;
-  todo.done = !todo.done;
+  if (completeSilentlyFails()) return render(); // no state change, no error shown
+  const saved = await request('PATCH', `/todos/${id}`, { done: !todo.done }, 'Could not update todo');
+  todo.done = saved.done;
   telemetry.crumb(todo.done ? 'todo completed' : 'todo reopened', { testid: 'toggle', title: todo.title });
-  save();
   render();
 }
 
-function deleteTodo(id) {
+async function deleteTodo(id) {
   const todo = todos.find((t) => t.id === id);
+  await request('DELETE', `/todos/${id}`, undefined, 'Could not delete todo');
   todos = todos.filter((t) => t.id !== id);
   telemetry.crumb('todo deleted', { testid: 'delete', title: todo?.title });
-  save();
   render();
+}
+
+/** An action that failed says so on the page, as the add always has. */
+function reporting(action) {
+  return async (...args) => {
+    clearError();
+    try {
+      await action(...args);
+    } catch (error) {
+      showError(error.message);
+      render();
+    }
+  };
 }
 
 function setFilter(next) {
@@ -171,7 +197,7 @@ function render() {
       toggle.dataset.testid = 'toggle';
       toggle.checked = todo.done;
       toggle.setAttribute('aria-label', `Complete ${todo.title}`);
-      toggle.addEventListener('change', () => toggleTodo(todo.id));
+      toggle.addEventListener('change', () => reporting(toggleTodo)(todo.id));
 
       const title = document.createElement('span');
       title.className = 'title';
@@ -185,7 +211,7 @@ function render() {
       remove.dataset.testid = 'delete';
       remove.textContent = 'Delete';
       remove.setAttribute('aria-label', `Delete ${todo.title}`);
-      remove.addEventListener('click', () => deleteTodo(todo.id));
+      remove.addEventListener('click', () => reporting(deleteTodo)(todo.id));
 
       item.append(toggle, title, remove);
       return item;
@@ -213,12 +239,11 @@ function clearError() {
 
 /* ---------- wiring ---------- */
 
-function seedTodos(count) {
-  return Array.from({ length: count }, (_, i) => ({
-    id: `seed-${i + 1}`,
-    title: `Seeded todo ${i + 1}`,
-    done: false,
-  }));
+/** The session's todos — or, with ?seed=N, N seeded ones in their place. */
+async function load() {
+  todos = config.seed > 0
+    ? await request('POST', '/seed', { count: config.seed }, 'Could not seed todos')
+    : await request('GET', '/todos', undefined, 'Could not load todos');
 }
 
 function init() {
@@ -227,18 +252,19 @@ function init() {
   document.querySelector('[data-testid="variant-banner"]').textContent =
     `bug=${config.bug}`;
 
-  if (config.seed > 0) {
-    todos = seedTodos(config.seed);
-    save();
-  } else {
-    todos = load();
-  }
+  // Wired before the list arrives, so an early Add is never a native form
+  // submit; it waits for the list, so the list never overwrites it.
+  const loaded = load().catch((error) => {
+    todos = [];
+    showError(error.message);
+  }).finally(render);
   applySelectorDefect();
   applySubmitDefect();
 
   document.querySelector('[data-testid="new-form"]').addEventListener('submit', async (event) => {
     event.preventDefault();
     const input = document.querySelector('[data-testid="new-input"]');
+    await loaded;
     clearError();
     try {
       await addTodo(input.value);
