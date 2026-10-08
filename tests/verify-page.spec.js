@@ -6,16 +6,18 @@
 const fs = require('fs');
 const path = require('path');
 const { test, expect } = require('@playwright/test');
-const { BASE_URL } = require('./helpers');
+const { API_URL, BASE_URL } = require('./helpers');
 
 const PAGE = new URL('verify/', BASE_URL.endsWith('/') ? BASE_URL : BASE_URL + '/').toString();
 
-async function openWithVariant(page, variant) {
+async function openWithVariant(page, variant, api = API_URL) {
+  const file = { bug: variant, ...(api ? { api } : {}) };
   await page.route('**/verify/variant.json*', (route) =>
     variant === null
       ? route.fulfill({ status: 404, body: 'not found' })
-      : route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ bug: variant }) }));
-  await page.goto(PAGE);
+      : route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(file) }));
+  // No file to name a backend in: a local run names its own on the URL.
+  await page.goto(variant === null && api ? `${PAGE}?api=${encodeURIComponent(api)}` : PAGE);
   await expect(page.getByTestId('variant-banner')).toContainText('bug=');
 }
 
@@ -31,7 +33,7 @@ test('the app variant breaks the add, as ?bug=app does', async ({ page }) => {
   await openWithVariant(page, 'app');
   await page.getByTestId('new-input').fill('Buy milk');
   await page.getByTestId('add-button').click();
-  await expect(page.getByTestId('error')).toContainText('Could not save todo (405)');
+  await expect(page.getByTestId('error')).toContainText('Could not save todo (500)');
 });
 
 test('no variant file means the healthy app', async ({ page }) => {
@@ -40,6 +42,26 @@ test('no variant file means the healthy app', async ({ page }) => {
   await page.getByTestId('new-input').fill('Buy milk');
   await page.getByTestId('add-button').click();
   await expect(page.getByTestId('todo-title')).toHaveText('Buy milk');
+});
+
+test('a preview names the backend it calls, and the page calls it', async ({ page }) => {
+  // A fix to the backend is proved against that fix's own backend (8 Oct).
+  const calls = [];
+  await page.route('https://fixed-backend.example/preview/abc123/api/**', (route) => {
+    calls.push(`${route.request().method()} ${new URL(route.request().url()).pathname}`);
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '[]',
+                           headers: { 'Access-Control-Allow-Origin': '*' } });
+  });
+  await openWithVariant(page, 'app', 'https://fixed-backend.example/preview/abc123/api');
+  await expect.poll(() => calls).toContain('GET /preview/abc123/api/todos');
+});
+
+test('a backend that is not https is never called', async ({ page }) => {
+  const called = [];
+  page.on('request', (r) => called.push(r.url()));
+  await openWithVariant(page, 'none', 'http://evil.example/api');
+  await expect(page.getByTestId('variant-banner')).toHaveText('bug=none');
+  expect(called.some((u) => u.startsWith('http://evil.example'))).toBe(false);
 });
 
 test('a variant that is not a plain name is ignored', async ({ page }) => {

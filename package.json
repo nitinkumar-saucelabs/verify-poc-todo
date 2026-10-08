@@ -5,6 +5,8 @@
   "description": "Sauce Verify POC target: a todo app with switchable defects, and its Playwright suite.",
   "scripts": {
     "serve": "npx --yes http-server app -p 8080 -c-1",
+    "server": "node server/server.mjs",
+    "test:server": "node --test server/*.test.mjs",
     "test": "playwright test",
     "test:none": "VARIANT=none playwright test",
     "test:app": "VARIANT=app playwright test",
