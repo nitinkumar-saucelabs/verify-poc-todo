@@ -249,8 +249,13 @@ async function load() {
 function init() {
   // /min/ and /min-nomap/ are the minified builds (ATT-75): the page says which.
   telemetry.start({ variant: config.bug, build: document.documentElement.dataset.build || 'plain' });
-  document.querySelector('[data-testid="variant-banner"]').textContent =
-    `bug=${config.bug}`;
+  // Which bug is planted, for the specs to read — never on screen (8 Oct): a
+  // screenshot of a failure is evidence a model reads, and a customer's app
+  // does not print its own bug. The URL still says it (?bug=); Verify crops
+  // the browser bar off before any model sees a screenshot.
+  const banner = document.querySelector('[data-testid="variant-banner"]');
+  banner.dataset.bug = config.bug;
+  banner.hidden = true;
 
   // Wired before the list arrives, so an early Add is never a native form
   // submit; it waits for the list, so the list never overwrites it.

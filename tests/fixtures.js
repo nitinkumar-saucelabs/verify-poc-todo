@@ -2,7 +2,7 @@ const fs = require('fs');
 const base = require('@playwright/test');
 
 /**
- * Two artefacts triage cannot work without, attached on failure only.
+ * Three artefacts triage uses, attached on failure only.
  *
  * 1. THE DOM AT FAILURE (`page-source.html`)
  *
@@ -59,6 +59,17 @@ const test = base.test.extend({
     await use(page);
 
     if (testInfo.status === testInfo.expectedStatus) return;
+
+    try {
+      // 3. WHAT THE PAGE SHOWED (8 Oct): the page only, never the browser bar
+      // (the URL carries ?bug=), for the model Verify asks when its rules
+      // cannot decide. Attached by path, so saucectl uploads it.
+      const shot = testInfo.outputPath('failure-screenshot.png');
+      await page.screenshot({ path: shot });
+      await testInfo.attach('failure-screenshot.png', { path: shot, contentType: 'image/png' });
+    } catch (error) {
+      // A closed page has nothing to show; the DOM below has the same problem.
+    }
 
     try {
       // Written to a file and attached by PATH, not by `body`. A body
