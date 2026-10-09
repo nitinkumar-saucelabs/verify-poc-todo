@@ -14,7 +14,7 @@ on:
       variant:
         description: Bug the /verify/ page plants
         type: choice
-        options: [none, selector, submit, app, flaky]
+        options: [none, selector, submit, app, flaky, toggle]
         default: none
       # Sauce Verify's proof of an app fix: the fix branch's app is published
       # beside the live one at /preview/<its 12-character commit>/, so AI
@@ -28,7 +28,7 @@ on:
       preview_variant:
         description: Bug the preview's /verify/ page plants
         type: choice
-        options: [none, selector, submit, app, flaky]
+        options: [none, selector, submit, app, flaky, toggle]
         default: none
       # A fix to the BACKEND (8 Oct): the backend Sauce Verify started at that
       # branch, which the preview's /verify/ page calls instead of the live one.

@@ -16,7 +16,8 @@ about.
 | `?bug=flaky` | Complete silently fails ~30% of the time | **FLAKE** | `complete`, sometimes `filter` |
 | `?bug=selector` | The add button's `data-testid` is renamed | **TEST BUG** | `add` |
 | `?bug=submit` | The add button is removed; Enter still submits | **TEST BUG** (only a model can fix it) | `add` |
-| `?bug=render` | The backend hands a saved todo back without its title and the renderer assumes one | **APP BUG** | `add` |
+| `?bug=toggle` | A todo's checkbox is labelled "Mark … as done" instead of "Complete …"; the todo is there | **TEST BUG** — for the AI Authoring recordings, which click it by its label | none (the specs use test ids) |
+| `?bug=render` | The backend hands a saved todo back without its title; the row shows with no name | **APP BUG** | `add` |
 
 Support parameters: `?seed=N` pre-populates todos without using the Add path,
 so non-add specs still run under `?bug=app`; `?flakeRate=R` tunes the flake
@@ -29,7 +30,8 @@ two root causes, which is exactly the distinction triage has to make.
 `?bug=render` exists for Part 2 rather than for triage. It is the variant whose
 fix is a **guard** — the defect is the data the backend hands back, so adding
 `?? ''` where the title is read repairs the crash and leaves the deliberate
-defect in place. Under `?bug=app` the only one-line fix deletes the defect
+defect in place. That guard is merged (30 Sep): the renderer no longer
+crashes, the row shows with no name, and `add` fails on its text. Under `?bug=app` the only one-line fix deletes the defect
 itself, which is why the crash compiler's patcher declined to write it.
 
 `/min/` serves the same app the way a customer ships it: one minified
@@ -52,11 +54,21 @@ origins at `https://todo-api.136.66.24.255.nip.io/api`, on the Sauce Verify VM.
 - **Defects.** The page sends its `?bug=` as `X-Todo-Bug`. `app` and `render`
   are the backend's defects (`server/todos.mjs`), so a fix to them is a fix to
   the backend; `selector`, `submit` and `flaky` stay the page's.
+- **Limits.** At most 100 todos a session and 50,000 in all (seeding too), 300
+  changes a minute from one address (`WRITE_LIMIT`), and rows are swept two
+  hours after they were written on the VM (`TODO_KEEP_HOURS`). The nightly
+  writes a few per job.
 - **Previews.** With `PREVIEW_TOKEN` set, the backend also starts a
   `sauce-verify/fix-*` branch's own backend on request (`POST /previews`) and
-  serves it at `/preview/<commit>/`. Sauce Verify uses it to prove a fix to the
-  backend: the Pages preview's `variant.json` names that backend as `api`
-  (`pages.yml` input `preview_api`), and AI Authoring walks the pair.
+  serves it at `/preview/<commit>/` for an hour (asking again extends it).
+  Sauce Verify uses it to prove a fix to the backend: the Pages preview's
+  `variant.json` names that backend as `api` (`pages.yml` input `preview_api`),
+  and AI Authoring walks the pair. A branch's server is model-written code, so
+  on the VM it runs as its own user in its own unit, started by a root-owned
+  launcher (`PREVIEW_LAUNCHER`; set up by verify-poc-agent `ops/vm/todo-backend.sh`):
+  no access to the token, the live database or the network beyond loopback.
+  Without a launcher (a laptop, the tests) it is a child process and isolates
+  nothing.
 
 ```bash
 npm run server                 # http://127.0.0.1:8095, server/todos.db

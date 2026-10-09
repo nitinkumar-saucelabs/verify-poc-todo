@@ -9,33 +9,109 @@
  *     → 201 {"url": "<PUBLIC_URL>/preview/<sha12>", "sha": "…", "expires_at": "…"}
  *   ANY  /preview/<sha12>/<path>   → that backend's <path>
  *
- * The branch is fetched from the repository, only `server/` is unpacked, and it
- * runs as a child process on a localhost port with an in-memory database and
- * none of this process's secrets. Only `sauce-verify/fix-*` branches, only with
- * the token, at most MAX at once, each stopped after TTL.
+ * Asking again for a running one keeps it running for another TTL. Only
+ * `sauce-verify/fix-*` branches, only with the token, at most MAX at once.
+ *
+ * WHO RUNS THE CODE (9 Oct review). A branch's server is model-written code,
+ * so it must not run as this process: on the VM the launcher is
+ * `sudo /usr/local/bin/todo-preview`, which starts it as another user in its
+ * own systemd unit — no access to this process, its environment, the token
+ * file or the live database, no network beyond loopback, and outside this
+ * service's cgroup, so restarting the live backend does not kill a proof in
+ * progress (the registry file lets the restarted one find it again). The
+ * direct launcher, for tests and a laptop, is a child process of this one and
+ * shares its user: it isolates nothing.
  */
 import { execFile, spawn } from 'node:child_process';
 import { timingSafeEqual } from 'node:crypto';
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
+import net from 'node:net';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 const run = promisify(execFile);
 
 export const REF = /^sauce-verify\/fix-[A-Za-z0-9._-]{1,100}$/;
+const SHA12 = /^[0-9a-f]{12}$/;
 const START_MS = 15_000;
+const PROXY_TIMEOUT_MS = 30_000;
+const HOP_BY_HOP = ['connection', 'keep-alive', 'proxy-connection', 'transfer-encoding', 'upgrade', 'te', 'trailer'];
 
-export function previewRunner({ repoUrl, dir, token, publicUrl, ttlMs = 30 * 60_000, max = 3, childEnv = {} }) {
-  const running = new Map(); // sha12 → { port, child, expiresAt, timer }
+/** Starts a preview's server on a port, and stops it — as a child process (tests, a laptop). */
+export function directLauncher(childEnv = {}) {
+  const children = new Map();
+  return {
+    async start(sha12, dir, port) {
+      const child = spawn(process.execPath, ['--no-warnings', join(dir, 'server', 'server.mjs')], {
+        env: { PATH: process.env.PATH, PORT: String(port), HOST: '127.0.0.1', TODO_DB: ':memory:', ...childEnv },
+        stdio: ['ignore', 'ignore', 'inherit'],
+      });
+      children.set(sha12, child);
+      child.on('exit', () => children.get(sha12) === child && children.delete(sha12));
+    },
+    async stop(sha12) {
+      children.get(sha12)?.kill();
+      children.delete(sha12);
+    },
+  };
+}
 
-  function stop(sha12) {
+/** The VM's: a root-owned wrapper that runs the preview as its own user in its own unit. */
+export function commandLauncher(command) {
+  return {
+    start: (sha12, dir, port) => run('sudo', ['-n', command, 'start', sha12, String(port)], { timeout: 30_000 }),
+    stop: (sha12) => run('sudo', ['-n', command, 'stop', sha12], { timeout: 30_000 }).catch(() => {}),
+  };
+}
+
+export function previewRunner({ repoUrl, dir, token, publicUrl, ttlMs = 60 * 60_000, max = 3,
+                                launcher = directLauncher(), origins = [] }) {
+  const running = new Map(); // sha12 → { port, expiresAt, timer }
+  const starting = new Map(); // sha12 → Promise: one start per commit at a time
+  let git = Promise.resolve(); // one fetch at a time: they share repo.git and FETCH_HEAD
+  const registry = join(dir, 'registry.json');
+
+  function save() {
+    const entries = Object.fromEntries([...running].map(([sha, p]) => [sha, { port: p.port, expiresAt: p.expiresAt }]));
+    writeFileSync(registry, JSON.stringify(entries));
+  }
+
+  function arm(sha12, preview) {
+    clearTimeout(preview.timer);
+    preview.timer = setTimeout(() => stop(sha12), Math.max(0, preview.expiresAt - Date.now()));
+    preview.timer.unref();
+  }
+
+  async function stop(sha12) {
     const preview = running.get(sha12);
     if (!preview) return;
     clearTimeout(preview.timer);
-    preview.child.kill();
     running.delete(sha12);
+    save();
+    await launcher.stop(sha12);
     rmSync(join(dir, sha12), { recursive: true, force: true });
+  }
+
+  /** After a restart of this process: the previews still running are proxied again. */
+  async function load() {
+    mkdirSync(dir, { recursive: true });
+    let saved = {};
+    try {
+      saved = JSON.parse(readFileSync(registry, 'utf8'));
+    } catch {
+      /* none yet */
+    }
+    for (const [sha12, { port, expiresAt }] of Object.entries(saved)) {
+      if (SHA12.test(sha12) && expiresAt > Date.now() && (await healthy(port))) {
+        const preview = { port, expiresAt };
+        running.set(sha12, preview);
+        arm(sha12, preview);
+      } else {
+        await launcher.stop(sha12);
+      }
+    }
+    save();
   }
 
   function authorised(header) {
@@ -44,13 +120,16 @@ export function previewRunner({ repoUrl, dir, token, publicUrl, ttlMs = 30 * 60_
     return given.length === wanted.length && timingSafeEqual(given, wanted);
   }
 
-  async function fetchRef(ref) {
-    const repo = join(dir, 'repo.git');
-    mkdirSync(dir, { recursive: true });
-    await run('git', ['init', '--quiet', '--bare', repo]);
-    await run('git', ['-C', repo, 'fetch', '--quiet', '--depth=1', repoUrl, ref], { timeout: 60_000 });
-    const { stdout } = await run('git', ['-C', repo, 'rev-parse', 'FETCH_HEAD']);
-    return { repo, sha: stdout.trim() };
+  function fetchRef(ref) {
+    const turn = git.then(async () => {
+      const repo = join(dir, 'repo.git');
+      await run('git', ['init', '--quiet', '--bare', repo]);
+      await run('git', ['-C', repo, 'fetch', '--quiet', '--depth=1', repoUrl, ref], { timeout: 60_000 });
+      const { stdout } = await run('git', ['-C', repo, 'rev-parse', 'FETCH_HEAD']);
+      return { repo, sha: stdout.trim() };
+    });
+    git = turn.catch(() => {});
+    return turn;
   }
 
   async function unpack(repo, sha, into) {
@@ -66,31 +145,17 @@ export function previewRunner({ repoUrl, dir, token, publicUrl, ttlMs = 30 * 60_
     });
   }
 
-  function startChild(into) {
-    return new Promise((resolve, reject) => {
-      const child = spawn(process.execPath, [join(into, 'server', 'server.mjs')], {
-        // A clean environment: the child never sees PREVIEW_TOKEN, so it cannot start previews itself.
-        env: { PATH: process.env.PATH, PORT: '0', HOST: '127.0.0.1', TODO_DB: ':memory:', ...childEnv },
-        stdio: ['ignore', 'pipe', 'inherit'],
-      });
-      const timer = setTimeout(() => {
-        child.kill();
-        reject(new Error('the preview backend did not start'));
-      }, START_MS);
-      let said = '';
-      child.stdout.on('data', (chunk) => {
-        said += chunk;
-        const port = said.match(/listening on (\d+)/)?.[1];
-        if (port) {
-          clearTimeout(timer);
-          resolve({ child, port: Number(port) });
-        }
-      });
-      child.on('exit', (code) => {
-        clearTimeout(timer);
-        reject(new Error(`the preview backend exited (${code})`));
-      });
-    });
+  async function launch(sha12, fetched) {
+    while (running.size >= max) await stop([...running.keys()][0]); // the oldest makes room
+    const into = join(dir, sha12);
+    await unpack(fetched.repo, fetched.sha, into);
+    const port = await freePort();
+    await launcher.start(sha12, into, port);
+    if (!(await healthy(port, START_MS))) {
+      await launcher.stop(sha12);
+      throw new Error('the preview backend did not start');
+    }
+    return { port };
   }
 
   async function start(req, res, body) {
@@ -105,41 +170,54 @@ export function previewRunner({ repoUrl, dir, token, publicUrl, ttlMs = 30 * 60_
     }
     const sha12 = fetched.sha.slice(0, 12);
     if (!running.has(sha12)) {
-      while (running.size >= max) stop([...running.keys()][0]); // the oldest makes room
+      if (!starting.has(sha12)) {
+        starting.set(sha12, launch(sha12, fetched).finally(() => starting.delete(sha12)));
+      }
       try {
-        const into = join(dir, sha12);
-        await unpack(fetched.repo, fetched.sha, into);
-        const { child, port } = await startChild(into);
-        running.set(sha12, { port, child });
-        child.on('exit', () => running.get(sha12)?.child === child && running.delete(sha12));
+        const { port } = await starting.get(sha12);
+        if (!running.has(sha12)) running.set(sha12, { port });
       } catch (error) {
         return send(res, 502, { error: String(error.message || error) });
       }
     }
     const preview = running.get(sha12);
-    clearTimeout(preview.timer);
-    preview.expiresAt = new Date(Date.now() + ttlMs);
-    preview.timer = setTimeout(() => stop(sha12), ttlMs);
-    preview.timer.unref();
+    preview.expiresAt = Date.now() + ttlMs;
+    arm(sha12, preview);
+    save();
     return send(res, 201, { url: `${publicUrl}/preview/${sha12}`, sha: fetched.sha,
-                            expires_at: preview.expiresAt.toISOString() });
+                            expires_at: new Date(preview.expiresAt).toISOString() });
   }
 
   function proxy(req, res, sha12, rest) {
     const preview = running.get(sha12);
-    if (!preview) return send(res, 404, { error: 'no such preview (it may have expired)' });
+    if (!preview) {
+      // With CORS: the page must read "gone", not a network error (9 Oct review).
+      return send(res, 404, { error: 'no such preview (it may have expired)' }, corsFor(req, origins));
+    }
+    const headers = { ...req.headers };
+    for (const name of HOP_BY_HOP) delete headers[name];
     const upstream = http.request(
-      { host: '127.0.0.1', port: preview.port, method: req.method, path: rest || '/', headers: req.headers },
+      { host: '127.0.0.1', port: preview.port, method: req.method, path: rest || '/', headers,
+        timeout: PROXY_TIMEOUT_MS },
       (answer) => {
-        res.writeHead(answer.statusCode, answer.headers);
+        const back = { ...answer.headers };
+        for (const name of HOP_BY_HOP) delete back[name];
+        res.writeHead(answer.statusCode, back);
         answer.pipe(res);
       });
-    upstream.on('error', () => send(res, 502, { error: 'the preview backend did not answer' }));
+    upstream.on('timeout', () => upstream.destroy(new Error('timeout')));
+    upstream.on('error', (error) => {
+      if (!res.headersSent) {
+        send(res, error.message === 'timeout' ? 504 : 502, { error: 'the preview backend did not answer' },
+             corsFor(req, origins));
+      } else res.destroy();
+    });
     req.pipe(upstream);
   }
 
   return {
     running,
+    load,
     /** True when it handled the request. `body` is read only for POST /previews. */
     async handle(req, res, url, readBody) {
       if (url.pathname === '/previews' && req.method === 'POST') {
@@ -151,11 +229,47 @@ export function previewRunner({ repoUrl, dir, token, publicUrl, ttlMs = 30 * 60_
       proxy(req, res, match[1], (match[2] || '/') + url.search);
       return true;
     },
-    stopAll: () => [...running.keys()].forEach(stop),
+    stopAll: () => Promise.all([...running.keys()].map(stop)),
+    /** For a restart of this process: forget the previews without stopping them (they outlive it on the VM). */
+    detach: () => [...running.values()].forEach((p) => clearTimeout(p.timer)),
   };
 }
 
-function send(res, status, body) {
-  res.writeHead(status, { 'Content-Type': 'application/json' });
+function corsFor(req, origins) {
+  const origin = req.headers.origin;
+  return origin && origins.includes(origin) ? { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' } : {};
+}
+
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.unref();
+    probe.on('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address();
+      probe.close(() => resolve(port));
+    });
+  });
+}
+
+async function healthy(port, waitMs = 0) {
+  const deadline = Date.now() + waitMs;
+  do {
+    const ok = await new Promise((resolve) => {
+      const probe = http.get({ host: '127.0.0.1', port, path: '/health', timeout: 2_000 }, (answer) => {
+        answer.resume();
+        resolve(answer.statusCode === 200);
+      });
+      probe.on('error', () => resolve(false));
+      probe.on('timeout', () => probe.destroy());
+    });
+    if (ok) return true;
+    if (Date.now() < deadline) await new Promise((r) => setTimeout(r, 200));
+  } while (Date.now() < deadline);
+  return false;
+}
+
+function send(res, status, body, extra = {}) {
+  res.writeHead(status, { 'Content-Type': 'application/json', ...extra });
   res.end(JSON.stringify(body));
 }

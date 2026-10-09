@@ -18,12 +18,12 @@ async function openWithVariant(page, variant, api = API_URL) {
       : route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(file) }));
   // No file to name a backend in: a local run names its own on the URL.
   await page.goto(variant === null && api ? `${PAGE}?api=${encodeURIComponent(api)}` : PAGE);
-  await expect(page.getByTestId('variant-banner')).toContainText('bug=');
+  await expect(page.getByTestId('variant-banner')).toHaveAttribute('data-bug', /^[a-z]+$/);
 }
 
 test('the deployed variant is what the page runs, and the URL says so', async ({ page }) => {
   await openWithVariant(page, 'selector');
-  await expect(page.getByTestId('variant-banner')).toHaveText('bug=selector');
+  await expect(page.getByTestId('variant-banner')).toHaveAttribute('data-bug', 'selector');
   expect(new URL(page.url()).searchParams.get('bug')).toBe('selector');
   await expect(page.getByTestId('add-button')).toHaveCount(0);
   await expect(page.getByTestId('submit-button')).toHaveCount(1);
@@ -38,7 +38,7 @@ test('the app variant breaks the add, as ?bug=app does', async ({ page }) => {
 
 test('no variant file means the healthy app', async ({ page }) => {
   await openWithVariant(page, null);
-  await expect(page.getByTestId('variant-banner')).toHaveText('bug=none');
+  await expect(page.getByTestId('variant-banner')).toHaveAttribute('data-bug', 'none');
   await page.getByTestId('new-input').fill('Buy milk');
   await page.getByTestId('add-button').click();
   await expect(page.getByTestId('todo-title')).toHaveText('Buy milk');
@@ -60,20 +60,35 @@ test('a backend that is not https is never called', async ({ page }) => {
   const called = [];
   page.on('request', (r) => called.push(r.url()));
   await openWithVariant(page, 'none', 'http://evil.example/api');
-  await expect(page.getByTestId('variant-banner')).toHaveText('bug=none');
+  await expect(page.getByTestId('variant-banner')).toHaveAttribute('data-bug', 'none');
   expect(called.some((u) => u.startsWith('http://evil.example'))).toBe(false);
+});
+
+test('the planted bug is never on screen: a failure screenshot must not give it away', async ({ page }) => {
+  await openWithVariant(page, 'app');
+  await expect(page.getByTestId('variant-banner')).toBeHidden();
+  await expect(page.locator('body')).not.toContainText('bug=');
+});
+
+test('the toggle variant relabels the checkbox and the todo is still added', async ({ page }) => {
+  await openWithVariant(page, 'toggle');
+  await page.getByTestId('new-input').fill('Buy milk');
+  await page.getByTestId('add-button').click();
+  await expect(page.getByTestId('todo-title')).toHaveText('Buy milk');
+  await expect(page.getByLabel('Mark Buy milk as done')).toHaveCount(1);
+  await expect(page.getByLabel('Complete Buy milk')).toHaveCount(0);   // what the recordings ask for
 });
 
 test('a variant that is not a plain name is ignored', async ({ page }) => {
   await openWithVariant(page, 'x"><script>');
-  await expect(page.getByTestId('variant-banner')).toHaveText('bug=none');
+  await expect(page.getByTestId('variant-banner')).toHaveAttribute('data-bug', 'none');
 });
 
 test('an explicit ?bug= on the URL wins over the file', async ({ page }) => {
   await page.route('**/verify/variant.json*', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '{"bug":"selector"}' }));
   await page.goto(PAGE + '?bug=none');
-  await expect(page.getByTestId('variant-banner')).toHaveText('bug=none');
+  await expect(page.getByTestId('variant-banner')).toHaveAttribute('data-bug', 'none');
 });
 
 test('the page is the app: its markup matches index.html', () => {

@@ -9,6 +9,9 @@
  *   ?bug=flaky     Complete silently fails some of the time-> FLAKE
  *   ?bug=selector  Add button's data-testid is renamed     -> TEST BUG
  *   ?bug=submit    Add button removed; Enter submits       -> TEST BUG (needs a model)
+ *   ?bug=toggle    a todo's checkbox is labelled "Mark …   -> TEST BUG: the todo IS there,
+ *                  as done", not "Complete …"                 an AI Authoring recording asks
+ *                                                             for the old label (9 Oct)
  *   ?bug=render    the backend hands a saved todo back     -> APP BUG, and the one
  *                  with no title; the renderer assumes one    whose fix is a guard
  *
@@ -139,7 +142,10 @@ async function addTodo(title) {
 async function toggleTodo(id) {
   const todo = todos.find((t) => t.id === id);
   if (!todo) return;
-  if (completeSilentlyFails()) return render(); // no state change, no error shown
+  // No state change, no error, and NO re-render (9 Oct): re-rendering replaced
+  // the checkbox, Playwright's check() retried on the new one and re-rolled
+  // the dice until it passed — ?bug=flaky stopped failing (30 of 30 passed).
+  if (completeSilentlyFails()) return;
   const saved = await request('PATCH', `/todos/${id}`, { done: !todo.done }, 'Could not update todo');
   todo.done = saved.done;
   telemetry.crumb(todo.done ? 'todo completed' : 'todo reopened', { testid: 'toggle', title: todo.title });
@@ -196,15 +202,19 @@ function render() {
       toggle.type = 'checkbox';
       toggle.dataset.testid = 'toggle';
       toggle.checked = todo.done;
-      toggle.setAttribute('aria-label', `Complete ${todo.title}`);
+      // ?bug=toggle: a relabelled control, the app working (9 Oct). The model
+      // had only ever seen "the typed todo is not found" when the save was
+      // refused; this is the same failure with the todo on screen — a Test bug.
+      toggle.setAttribute('aria-label', config.bug === 'toggle' ? `Mark ${todo.title} as done` : `Complete ${todo.title}`);
       toggle.addEventListener('change', () => reporting(toggleTodo)(todo.id));
 
       const title = document.createElement('span');
       title.className = 'title';
       title.dataset.testid = 'todo-title';
-      // Assumes every todo has a title. Under ?bug=render one does not, and
-      // this throws — an ordinary crash on unexpected data, and the kind whose
-      // fix is a one-line guard rather than the removal of a feature.
+      // Under ?bug=render a todo comes back with no title. This read used to
+      // throw — an ordinary crash on unexpected data, whose fix is a one-line
+      // guard; Part 2's crash compiler proposed exactly this `?? ''` (30 Sep),
+      // so the row now shows without a name and `add` fails on its text.
       title.textContent = (todo.title ?? '').trim();
 
       const remove = document.createElement('button');
@@ -249,8 +259,13 @@ async function load() {
 function init() {
   // /min/ and /min-nomap/ are the minified builds (ATT-75): the page says which.
   telemetry.start({ variant: config.bug, build: document.documentElement.dataset.build || 'plain' });
-  document.querySelector('[data-testid="variant-banner"]').textContent =
-    `bug=${config.bug}`;
+  // Which bug is planted, for the specs to read — never on screen (8 Oct): a
+  // screenshot of a failure is evidence a model reads, and a customer's app
+  // does not print its own bug. The URL still says it (?bug=); Verify crops
+  // the browser bar off before any model sees a screenshot.
+  const banner = document.querySelector('[data-testid="variant-banner"]');
+  banner.dataset.bug = config.bug;
+  banner.hidden = true;
 
   // Wired before the list arrives, so an early Add is never a native form
   // submit; it waits for the list, so the list never overwrites it.
