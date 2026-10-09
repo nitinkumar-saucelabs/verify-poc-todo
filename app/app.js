@@ -139,7 +139,10 @@ async function addTodo(title) {
 async function toggleTodo(id) {
   const todo = todos.find((t) => t.id === id);
   if (!todo) return;
-  if (completeSilentlyFails()) return render(); // no state change, no error shown
+  // No state change, no error, and NO re-render (9 Oct): re-rendering replaced
+  // the checkbox, Playwright's check() retried on the new one and re-rolled
+  // the dice until it passed — ?bug=flaky stopped failing (30 of 30 passed).
+  if (completeSilentlyFails()) return;
   const saved = await request('PATCH', `/todos/${id}`, { done: !todo.done }, 'Could not update todo');
   todo.done = saved.done;
   telemetry.crumb(todo.done ? 'todo completed' : 'todo reopened', { testid: 'toggle', title: todo.title });
