@@ -48,7 +48,6 @@ function create(store, session, body, bug) {
   if (title.length > LIMITS.titleChars) return refuse(400, `a title is at most ${LIMITS.titleChars} characters`);
   if (store.count(session) >= LIMITS.perSession) return refuse(429, `at most ${LIMITS.perSession} todos per session`);
   if (store.total() >= LIMITS.total) return refuse(503, 'the backend is full; try again tomorrow');
-  if (bug === 'app') return refuse(500, 'the backend refuses to save'); // ?bug=app: every save is refused
   // ?bug=render: the row is saved and handed back without its title.
   return answer(201, store.insert(session, randomUUID(), bug === 'render' ? null : title));
 }
