@@ -70,6 +70,15 @@ test('the planted bug is never on screen: a failure screenshot must not give it 
   await expect(page.locator('body')).not.toContainText('bug=');
 });
 
+test('the toggle variant relabels the checkbox and the todo is still added', async ({ page }) => {
+  await openWithVariant(page, 'toggle');
+  await page.getByTestId('new-input').fill('Buy milk');
+  await page.getByTestId('add-button').click();
+  await expect(page.getByTestId('todo-title')).toHaveText('Buy milk');
+  await expect(page.getByLabel('Mark Buy milk as done')).toHaveCount(1);
+  await expect(page.getByLabel('Complete Buy milk')).toHaveCount(0);   // what the recordings ask for
+});
+
 test('a variant that is not a plain name is ignored', async ({ page }) => {
   await openWithVariant(page, 'x"><script>');
   await expect(page.getByTestId('variant-banner')).toHaveAttribute('data-bug', 'none');

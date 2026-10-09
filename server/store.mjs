@@ -5,14 +5,15 @@
  * Every row belongs to a SESSION: the page makes one id per browser tab
  * (sessionStorage) and sends it on every request. The nightly runs ~65 jobs
  * at once against this one backend; without sessions they would all share one
- * list and every count assertion would fail. Rows are swept a day after they
- * were written — this is a test target, not a place to keep anything.
+ * list and every count assertion would fail. Rows are swept a while after they
+ * were written (two hours on the VM, TODO_KEEP_HOURS) — this is a test target,
+ * not a place to keep anything.
  */
 import { DatabaseSync } from 'node:sqlite';
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
-export function openStore(path) {
+export function openStore(path, { keepMs = DAY_MS } = {}) {
   const db = new DatabaseSync(path);
   if (path !== ':memory:') db.exec('PRAGMA journal_mode = WAL');
   db.exec(`CREATE TABLE IF NOT EXISTS todo (
@@ -50,7 +51,7 @@ export function openStore(path) {
     clear: (session) => db.prepare('DELETE FROM todo WHERE session = ?').run(session),
     count: (session) => db.prepare('SELECT COUNT(*) AS n FROM todo WHERE session = ?').get(session).n,
     total: () => db.prepare('SELECT COUNT(*) AS n FROM todo').get().n,
-    sweep: (now = Date.now()) => db.prepare('DELETE FROM todo WHERE created_at < ?').run(now - DAY_MS).changes,
+    sweep: (now = Date.now()) => db.prepare('DELETE FROM todo WHERE created_at < ?').run(now - keepMs).changes,
     close: () => db.close(),
   };
 }

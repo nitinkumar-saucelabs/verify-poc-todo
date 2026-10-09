@@ -9,6 +9,9 @@
  *   ?bug=flaky     Complete silently fails some of the time-> FLAKE
  *   ?bug=selector  Add button's data-testid is renamed     -> TEST BUG
  *   ?bug=submit    Add button removed; Enter submits       -> TEST BUG (needs a model)
+ *   ?bug=toggle    a todo's checkbox is labelled "Mark …   -> TEST BUG: the todo IS there,
+ *                  as done", not "Complete …"                 an AI Authoring recording asks
+ *                                                             for the old label (9 Oct)
  *   ?bug=render    the backend hands a saved todo back     -> APP BUG, and the one
  *                  with no title; the renderer assumes one    whose fix is a guard
  *
@@ -199,15 +202,19 @@ function render() {
       toggle.type = 'checkbox';
       toggle.dataset.testid = 'toggle';
       toggle.checked = todo.done;
-      toggle.setAttribute('aria-label', `Complete ${todo.title}`);
+      // ?bug=toggle: a relabelled control, the app working (9 Oct). The model
+      // had only ever seen "the typed todo is not found" when the save was
+      // refused; this is the same failure with the todo on screen — a Test bug.
+      toggle.setAttribute('aria-label', config.bug === 'toggle' ? `Mark ${todo.title} as done` : `Complete ${todo.title}`);
       toggle.addEventListener('change', () => reporting(toggleTodo)(todo.id));
 
       const title = document.createElement('span');
       title.className = 'title';
       title.dataset.testid = 'todo-title';
-      // Assumes every todo has a title. Under ?bug=render one does not, and
-      // this throws — an ordinary crash on unexpected data, and the kind whose
-      // fix is a one-line guard rather than the removal of a feature.
+      // Under ?bug=render a todo comes back with no title. This read used to
+      // throw — an ordinary crash on unexpected data, whose fix is a one-line
+      // guard; Part 2's crash compiler proposed exactly this `?? ''` (30 Sep),
+      // so the row now shows without a name and `add` fails on its text.
       title.textContent = (todo.title ?? '').trim();
 
       const remove = document.createElement('button');

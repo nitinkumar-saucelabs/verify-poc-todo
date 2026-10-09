@@ -26,7 +26,7 @@ on:
         required: false
         default: all
         type: choice
-        options: [all, none, app, flaky, selector, submit]
+        options: [all, none, app, flaky, selector, submit, toggle]
 
 jobs:
   suite:
@@ -79,7 +79,7 @@ jobs:
   # waits until Pages serves it, then runs the suite under a build tag the agent
   # can find. One variant per night — a single URL serves one app at a time.
   ai-suite:
-    if: vars.VERIFY_SUITE_ID != '' && (github.event_name == 'schedule' || inputs.variant == '' || contains(fromJSON('["all","none","app","selector"]'), inputs.variant))
+    if: vars.VERIFY_SUITE_ID != '' && (github.event_name == 'schedule' || inputs.variant == '' || contains(fromJSON('["all","none","app","selector","toggle"]'), inputs.variant))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -100,8 +100,10 @@ jobs:
           if [ -n "${{ inputs.variant }}" ] && [ "${{ inputs.variant }}" != "all" ]; then
             v="${{ inputs.variant }}"
           else
-            # Rotate by day of year, so three nights cover all three.
-            vs=(none selector app); v="${vs[$(( 10#$(date -u +%j) % 3 ))]}"
+            # Rotate by day of year, so four nights cover all four. `toggle`
+            # (9 Oct) is a Test bug that looks like the refused save: the
+            # measured record needs both answers before a model may decide.
+            vs=(none selector app toggle); v="${vs[$(( 10#$(date -u +%j) % 4 ))]}"
           fi
           echo "value=$v" >> "$GITHUB_OUTPUT"
           echo "{\"bug\": \"$v\"}" > app/verify/variant.json

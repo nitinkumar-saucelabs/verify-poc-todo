@@ -6,8 +6,9 @@
  * at once — the nightly runs all of them together.
  *
  *   bug=app      saving a todo is refused (500)       -> APP BUG, fixed HERE
- *   bug=render   a saved todo comes back with no title -> the page's renderer
- *                                                        crashes (Part 2)
+ *   bug=render   a saved todo comes back with no title -> APP BUG: the page shows
+ *                                                        a nameless row (its renderer
+ *                                                        guards since 30 Sep)
  *
  * The other defects (selector, submit, flaky) are the page's, in app/app.js.
  *
@@ -56,6 +57,10 @@ function seed(store, session, body) {
   const count = Number(body?.count);
   if (!Number.isInteger(count) || count < 0 || count > LIMITS.seed) {
     return refuse(400, `count is a whole number from 0 to ${LIMITS.seed}`);
+  }
+  // The total cap holds for seeds too (9 Oct review: they bypassed it).
+  if (store.total() - store.count(session) + count > LIMITS.total) {
+    return refuse(503, 'the backend is full; try again later');
   }
   store.clear(session);
   for (let n = 1; n <= count; n += 1) store.insert(session, `seed-${n}`, `Seeded todo ${n}`);

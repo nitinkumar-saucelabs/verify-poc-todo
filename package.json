@@ -6,7 +6,7 @@
   "scripts": {
     "serve": "npx --yes http-server app -p 8080 -c-1",
     "server": "node server/server.mjs",
-    "test:server": "node --test server/*.test.mjs",
+    "test:server": "node --no-warnings --test --test-timeout=60000 server/*.test.mjs",
     "test": "playwright test",
     "test:none": "VARIANT=none playwright test",
     "test:app": "VARIANT=app playwright test",
