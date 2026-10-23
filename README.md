@@ -12,16 +12,17 @@ about.
 | URL | What the app does | Correct verdict | Which specs fail |
 |---|---|---|---|
 | `?bug=none` | Everything works | green | none |
-| `?bug=app` | Add posts to an endpoint that rejects; the item never appears | **APP BUG** | `add` |
+| `?bug=app` | The backend refuses every save (500); the item never appears | **APP BUG** | `add` |
 | `?bug=flaky` | Complete silently fails ~30% of the time | **FLAKE** | `complete`, sometimes `filter` |
 | `?bug=selector` | The add button's `data-testid` is renamed | **TEST BUG** | `add` |
 | `?bug=submit` | The add button is removed; Enter still submits | **TEST BUG** (only a model can fix it) | `add` |
-| `?bug=render` | A saved todo comes back without its title and the renderer assumes one | **APP BUG** | `add` |
+| `?bug=toggle` | A todo's checkbox is labelled "Mark … as done" instead of "Complete …"; the todo is there | **TEST BUG** — for the AI Authoring recordings, which click it by its label | none (the specs use test ids) |
+| `?bug=render` | The backend hands a saved todo back without its title; the row shows with no name | **APP BUG** | `add` |
 
 Support parameters: `?seed=N` pre-populates todos without using the Add path,
 so non-add specs still run under `?bug=app`; `?flakeRate=R` tunes the flake
-rate for calibrating the rerun cap; `?api=URL` points the app variant at a
-real backend if you want a 500 instead of a 405.
+rate for calibrating the rerun cap; `?api=URL` points the page at another
+backend (https, or http on localhost).
 
 `add` fails under both `?bug=app` and `?bug=selector` on purpose: one test,
 two root causes, which is exactly the distinction triage has to make.
@@ -29,7 +30,8 @@ two root causes, which is exactly the distinction triage has to make.
 `?bug=render` exists for Part 2 rather than for triage. It is the variant whose
 fix is a **guard** — the defect is the data the backend hands back, so adding
 `?? ''` where the title is read repairs the crash and leaves the deliberate
-defect in place. Under `?bug=app` the only one-line fix deletes the defect
+defect in place. That guard is merged (30 Sep): the renderer no longer
+crashes, the row shows with no name, and `add` fails on its text. Under `?bug=app` the only one-line fix deletes the defect
 itself, which is why the crash compiler's patcher declined to write it.
 
 `/min/` serves the same app the way a customer ships it: one minified
@@ -40,6 +42,39 @@ are missing. Both are built by `scripts/build-min.sh`; re-run it after any
 change to `app/` and upload `symbols/` (the command is in the script). A test
 fails if the committed bundle no longer matches the source.
 
+## The backend
+
+The todos live on a backend (`server/`, Node 22.13+, no dependencies: the
+database is one SQLite file through `node:sqlite`). The page calls it across
+origins at `https://todo-api.136.66.24.255.nip.io/api`, on the Sauce Verify VM.
+
+- **Sessions.** Each browser tab makes an id (sessionStorage) and sends it as
+  `X-Todo-Session`; rows belong to it and are swept a day later. The nightly
+  runs ~65 jobs at once, and without sessions they would share one list.
+- **Defects.** The page sends its `?bug=` as `X-Todo-Bug`. `app` and `render`
+  are the backend's defects (`server/todos.mjs`), so a fix to them is a fix to
+  the backend; `selector`, `submit` and `flaky` stay the page's.
+- **Limits.** At most 100 todos a session and 50,000 in all (seeding too), 300
+  changes a minute from one address (`WRITE_LIMIT`), and rows are swept two
+  hours after they were written on the VM (`TODO_KEEP_HOURS`). The nightly
+  writes a few per job.
+- **Previews.** With `PREVIEW_TOKEN` set, the backend also starts a
+  `sauce-verify/fix-*` branch's own backend on request (`POST /previews`) and
+  serves it at `/preview/<commit>/` for an hour (asking again extends it).
+  Sauce Verify uses it to prove a fix to the backend: the Pages preview's
+  `variant.json` names that backend as `api` (`pages.yml` input `preview_api`),
+  and AI Authoring walks the pair. A branch's server is model-written code, so
+  on the VM it runs as its own user in its own unit, started by a root-owned
+  launcher (`PREVIEW_LAUNCHER`; set up by verify-poc-agent `ops/vm/todo-backend.sh`):
+  no access to the token, the live database or the network beyond loopback.
+  Without a launcher (a laptop, the tests) it is a child process and isolates
+  nothing.
+
+```bash
+npm run server                 # http://127.0.0.1:8095, server/todos.db
+npm run test:server            # its tests: node --test
+```
+
 ## Running it
 
 ```bash
@@ -47,7 +82,9 @@ npm install
 npx playwright install chromium
 
 npm run serve                      # http://localhost:8080
-BASE_URL=http://localhost:8080 npm run test:none      # 6 pass
+npm run server                     # the backend, http://127.0.0.1:8095
+export API_URL=http://localhost:8095/api   # or the tests call the live backend
+BASE_URL=http://localhost:8080 npm run test:none      # all pass
 BASE_URL=http://localhost:8080 npm run test:app       # only add fails
 BASE_URL=http://localhost:8080 npm run test:selector  # only add fails
 BASE_URL=http://localhost:8080 npm run test:flaky     # complete is mixed

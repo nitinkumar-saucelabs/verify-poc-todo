@@ -1,10 +1,42 @@
 name: Deploy app to Pages
+# Sauce Verify finds a preview's run by this name.
+run-name: ${{ inputs.preview_ref && format('Preview {0}', inputs.preview_ref) || 'Deploy app to Pages' }}
 
 on:
   push:
     branches: [main]
     paths: ['app/**', '.github/workflows/pages.yml']
   workflow_dispatch:
+    inputs:
+      # Sauce Verify's Runs → Plant: the bug /verify/ serves to the AI Authoring
+      # tests recorded there, until another is planted. A push deploys the
+      # committed variant.json ("none").
+      variant:
+        description: Bug the /verify/ page plants
+        type: choice
+        options: [none, selector, submit, app, flaky, toggle]
+        default: none
+      # Sauce Verify's proof of an app fix: the fix branch's app is published
+      # beside the live one at /preview/<its 12-character commit>/, so AI
+      # Authoring can walk a test on the fixed app before anything is merged.
+      # Pages deploys only from main, so main's workflow publishes it. A new
+      # path has nothing cached, unlike the live pages (max-age=600).
+      preview_ref:
+        description: Branch or commit to publish at /preview/<commit>/ (blank for none)
+        type: string
+        default: ''
+      preview_variant:
+        description: Bug the preview's /verify/ page plants
+        type: choice
+        options: [none, selector, submit, app, flaky, toggle]
+        default: none
+      # A fix to the BACKEND (8 Oct): the backend Sauce Verify started at that
+      # branch, which the preview's /verify/ page calls instead of the live one.
+      preview_api:
+        description: Backend API the preview's /verify/ page calls (https; blank for the live one)
+        type: string
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -20,12 +52,48 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.deployment-retry.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - name: Plant the bug /verify/ serves
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "{\"bug\": \"${{ inputs.variant }}\"}" > app/verify/variant.json
+          cat app/verify/variant.json
+      - name: Publish the preview
+        if: github.event_name == 'workflow_dispatch' && inputs.preview_ref != ''
+        env:
+          REF: ${{ inputs.preview_ref }}
+          BUG: ${{ inputs.preview_variant }}
+          API: ${{ inputs.preview_api }}
+        run: |
+          [[ "$REF" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "::error::not a branch or commit: $REF"; exit 1; }
+          [[ -z "$API" || "$API" =~ ^https://[A-Za-z0-9.-]+(/[A-Za-z0-9._/-]*)?$ ]] || { echo "::error::not an https API: $API"; exit 1; }
+          git fetch --no-tags --depth=1 origin "$REF"
+          sha=$(git rev-parse FETCH_HEAD | cut -c1-12)
+          mkdir -p "app/preview/$sha" /tmp/preview
+          git archive FETCH_HEAD app | tar -x -C /tmp/preview
+          cp -R /tmp/preview/app/. "app/preview/$sha/"
+          if [ -n "$API" ]; then
+            echo "{\"bug\": \"$BUG\", \"api\": \"$API\"}" > "app/preview/$sha/verify/variant.json"
+          else
+            echo "{\"bug\": \"$BUG\"}" > "app/preview/$sha/verify/variant.json"
+          fi
+          echo "preview of $REF at preview/$sha/ — /verify/ plants $BUG${API:+, calls $API}"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: app
       - id: deployment
+        uses: actions/deploy-pages@v4
+        # GitHub sometimes loses the just-uploaded artifact's metadata for a
+        # moment ("No artifacts named github-pages were found" / "Fetching
+        # artifact metadata failed") — 5 Oct, twice on 6 Oct, one of them the
+        # nightly. The artifact IS there; a second deploy a little later works.
+        continue-on-error: true
+      - name: Retry the Pages deploy once
+        if: steps.deployment.outcome == 'failure'
+        run: sleep 30
+      - id: deployment-retry
+        if: steps.deployment.outcome == 'failure'
         uses: actions/deploy-pages@v4

@@ -3,3 +3,6 @@ test-results/
 playwright-report/
 report/
 artifacts/
+server/*.db
+server/*.db-*
+server/.previews/

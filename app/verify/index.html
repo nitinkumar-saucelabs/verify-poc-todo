@@ -9,21 +9,28 @@
      keeps its URL for ever and replays the selectors it saw, so the defect cannot
      ride on the URL the way ?bug= does for the Playwright suite: the page has to
      change under a fixed URL, as a customer's app does. The variant comes from
-     variant.json, written and deployed by the nightly before the suite runs.
+     variant.json, written and deployed by the nightly before the suite runs. A fix's
+     preview also names the backend to call there (`api`).
      Read synchronously here, before the module below, so the app starts with it
      and keeps its static script (a dynamic import races the load event). -->
 <script>
   (function () {
     if (/[?&]bug=/.test(location.search)) return;
-    var bug = 'none';
+    var bug = 'none', api = '';
     try {
       var x = new XMLHttpRequest();
       x.open('GET', 'variant.json?t=' + Date.now(), false);
       x.send();
-      if (x.status === 200) bug = String(JSON.parse(x.responseText).bug || 'none');
+      if (x.status === 200) {
+        var file = JSON.parse(x.responseText);
+        bug = String(file.bug || 'none');
+        // A fix's preview names that fix's own backend (8 Oct); app.js checks it is https.
+        api = String(file.api || '');
+      }
     } catch (e) { /* no file: the healthy app */ }
     if (!/^[a-z]{1,20}$/.test(bug)) bug = 'none';
     var q = new URLSearchParams(location.search); q.set('bug', bug);
+    if (api) q.set('api', api);
     history.replaceState(null, '', location.pathname + '?' + q + location.hash);
   })();
 </script>
