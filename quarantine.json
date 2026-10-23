@@ -1,3 +1,10 @@
 {
-  "quarantined": []
+  "quarantined": [
+    {
+      "test": "delete-firefox",
+      "defect": "d-5b587314",
+      "suite": "delete-firefox",
+      "reason": "Passed 1 of 1 reruns of the same commit and configuration. One pass on unchanged code disproves determinism."
+    }
+  ]
 }
