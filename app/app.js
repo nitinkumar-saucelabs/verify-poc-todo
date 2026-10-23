@@ -211,19 +211,21 @@ function render() {
       const title = document.createElement('span');
       title.className = 'title';
       title.dataset.testid = 'todo-title';
-      // Under ?bug=render a todo comes back with no title. This read used to
-      // throw — an ordinary crash on unexpected data, whose fix is a one-line
-      // guard; Part 2's crash compiler proposed exactly this `?? ''` (30 Sep),
-      // so the row now shows without a name and `add` fails on its text.
-      title.textContent = (todo.title ?? '').trim();
+      // Assumes every todo has a title. Under ?bug=render one does not, and
+      // this throws — an ordinary crash on unexpected data, and the kind whose
+      // fix is a one-line guard rather than the removal of a feature.
+      title.textContent = todo.title.trim();
 
       const remove = document.createElement('button');
       remove.dataset.testid = 'delete';
       remove.textContent = 'Delete';
-      remove.setAttribute('aria-label', `Delete ${todo.title}`);
       remove.addEventListener('click', () => reporting(deleteTodo)(todo.id));
 
       item.append(toggle, title, remove);
+
+      // The row's accessible names, set once it is assembled: the delete button
+      // is named after the todo it removes.
+      remove.setAttribute('aria-label', `Delete ${todo.title.trim()}`);
       return item;
     }),
   );
