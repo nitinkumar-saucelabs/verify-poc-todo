@@ -228,7 +228,7 @@ test.describe('environment and commit attributes', () => {
 
     await submittedTo(page, reports, appUrl('app'));
 
-    expect(reports[0].body).toContain('Could not save todo (405)');
+    expect(reports[0].body).toContain('Could not save todo (500)');
     expect(reports[0].body).not.toContain('"environment"');
     expect(reports[0].body).not.toContain('"commit"');
   });
@@ -240,7 +240,7 @@ test.describe('environment and commit attributes', () => {
 
     await submittedTo(page, reports, appUrl('app'));
 
-    expect(reports[0].body).toContain('Could not save todo (405)');
+    expect(reports[0].body).toContain('Could not save todo (500)');
     expect(reports[0].body).not.toContain('"environment"');
   });
 
