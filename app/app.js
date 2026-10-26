@@ -192,7 +192,7 @@ function render() {
   const visible = visibleTodos();
 
   list.replaceChildren(
-    ...visible.map((raw) => { const todo = { ...raw, title: raw.title ?? '' };
+    ...visible.map((todo) => {
       const item = document.createElement('li');
       item.dataset.testid = 'todo-item';
       item.dataset.id = todo.id;
@@ -233,6 +233,11 @@ function render() {
   document.querySelector('[data-testid="empty-state"]').hidden = todos.length > 0;
   document.querySelector('[data-testid="count"]').textContent =
     `${todos.filter((t) => !t.done).length} left`;
+
+  // The tab names the newest todo, so a backgrounded tab says what was last
+  // added. Read from the full list, not the filtered one.
+  const newest = todos[todos.length - 1];
+  document.title = newest ? `${newest.title.trim()} - Todos` : 'Todos';
 
   for (const button of document.querySelectorAll('.filters button')) {
     button.setAttribute('aria-pressed', String(button.dataset.filter === filter));
