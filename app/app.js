@@ -181,10 +181,10 @@ function setFilter(next) {
 
 /* ---------- rendering ---------- */
 
-function visibleTodos() {
-  if (filter === 'active') return todos.filter((t) => !t.done);
-  if (filter === 'completed') return todos.filter((t) => t.done);
-  return todos;
+function visibleTodos() { // copies, so a row can be shaped without touching the store
+  if (filter === 'active') return todos.filter((t) => !t.done).map((t) => ({ ...t }));
+  if (filter === 'completed') return todos.filter((t) => t.done).map((t) => ({ ...t }));
+  return todos.map((t) => ({ ...t }));
 }
 
 function render() {
