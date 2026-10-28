@@ -71,6 +71,16 @@ function session() {
 let todos = [];
 let filter = 'all';
 
+// Titles as they arrived from the server, for the delete labels and the tab
+// name. The first note of a todo stands; render only reads them.
+const arrived = (() => {
+  const titles = new Map();
+  return {
+    note: (todo) => titles.has(todo.id) || titles.set(todo.id, todo.title),
+    title: (todo) => (titles.has(todo.id) ? titles.get(todo.id) : todo.title),
+  };
+})();
+
 /* ---------- the backend ---------- */
 
 /**
@@ -135,6 +145,7 @@ async function addTodo(title) {
   // is a guard where it is read, and render() is where it throws.
   const saved = await request('POST', '/todos', { title: title.trim() }, 'Could not save todo');
   todos.push(saved);
+  arrived.note(todos[todos.length - 1]);
   telemetry.crumb('todo added', { count: todos.length });
   render();
 }
@@ -214,8 +225,6 @@ function render() {
       // Assumes every todo has a title. Under ?bug=render one does not, and
       // this throws — an ordinary crash on unexpected data, and the kind whose
       // fix is a one-line guard rather than the removal of a feature.
-      todos.forEach((t) => { if (t.title == null) t.title = ''; });
-      if (todo.title == null) todo.title = '';
       title.textContent = todo.title.trim();
 
       const remove = document.createElement('button');
@@ -227,7 +236,7 @@ function render() {
 
       // The row's accessible names, set once it is assembled: the delete button
       // is named after the todo it removes.
-      remove.setAttribute('aria-label', `Delete ${todo.title.trim()}`);
+      remove.setAttribute('aria-label', `Delete ${arrived.title(todo).trim()}`);
       return item;
     }),
   );
@@ -239,7 +248,7 @@ function render() {
   // The tab names the newest todo, so a backgrounded tab says what was last
   // added. Read from the full list, not the filtered one.
   const newest = todos[todos.length - 1];
-  document.title = newest ? `${newest.title.trim()} - Todos` : 'Todos';
+  document.title = newest ? `${arrived.title(newest).trim()} - Todos` : 'Todos';
 
   for (const button of document.querySelectorAll('.filters button')) {
     button.setAttribute('aria-pressed', String(button.dataset.filter === filter));
